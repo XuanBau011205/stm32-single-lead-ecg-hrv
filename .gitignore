@@ -1,0 +1,46 @@
+# Firmware build outputs
+build/
+bin/
+obj/
+*.elf
+*.bin
+*.hex
+*.map
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Python cache & virtual environment
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Large experimental data in data/ (keep folder structure and .gitkeep)
+data/calib/*.csv
+data/calib/*.bin
+data/test/*.csv
+data/test/*.bin
+*.csv
+
+# Altium Designer backup & temporary files
+History/
+__Previews/
+*.SchDocPreview
+*.PcbDocPreview
+*.Dat
+*.zip
+*.html
+*.log
+*.~*
+*.Backups
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+compile_commands.json

@@ -1,0 +1,14 @@
+# P05-Sim (Python Digital Twin) Dependencies
+# Phase 1 (Board Bundle & Physical Plant): 100% Python 3.9+ stdlib (0 external deps required!)
+# Phase 2 (Fast SIL & MIT-BIH Batch):
+numpy>=1.22.0
+scipy>=1.8.0
+wfdb>=4.0.0
+pyserial>=3.5
+# Phase 3 (ARM Cortex-M3 Firmware Emulation):
+unicorn>=2.0.1
+pyelftools>=0.30
+# Phase 4 (Desktop Virtual Lab UI - 60 FPS):
+PySide6>=6.6.0
+pyqtgraph>=0.13.3
+pillow>=10.0.0

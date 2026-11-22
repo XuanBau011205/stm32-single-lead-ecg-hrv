@@ -1,0 +1,1805 @@
+{
+  "schema_version": "1.0",
+  "project": "P05 Single-Lead ECG & On-Device HRV Monitor",
+  "board": {
+    "width_mm": 80.0,
+    "height_mm": 55.0,
+    "layers": 2,
+    "component_count": 91,
+    "unique_bom_lines": 43,
+    "drills": {
+      "pth_round": 186,
+      "npth_round": 6,
+      "pth_slot": 4,
+      "total": 196
+    },
+    "drc": {
+      "present": true,
+      "violations": 0,
+      "date": "11/22/2026",
+      "time": "8:43:05 PM"
+    },
+    "render_images": {
+      "top": "docs/images/pcb_top.png",
+      "bottom": "docs/images/pcb_bottom.png"
+    }
+  },
+  "pinout": {
+    "PA0": {
+      "net": "ECG_OUT",
+      "dir": "ANALOG_IN",
+      "peripheral": "ADC1_IN0",
+      "target": "U_AFE (AD8232) OUT + TP_ECG_OUT"
+    },
+    "PA1": {
+      "net": "ECG_LOD_P",
+      "dir": "DIGITAL_IN",
+      "peripheral": "GPIOA.1",
+      "target": "U_AFE LO+"
+    },
+    "PA2": {
+      "net": "ECG_LOD_N",
+      "dir": "DIGITAL_IN",
+      "peripheral": "GPIOA.2",
+      "target": "U_AFE LO-"
+    },
+    "PA3": {
+      "net": "ECG_SDN",
+      "dir": "DIGITAL_OUT",
+      "peripheral": "GPIOA.3",
+      "target": "U_AFE SDN (Active-Low)"
+    },
+    "PA4": {
+      "net": "SD_CS",
+      "dir": "DIGITAL_OUT",
+      "peripheral": "SPI1_NSS",
+      "target": "J_SD CS (Active-Low)"
+    },
+    "PA5": {
+      "net": "SPI1_SCK",
+      "dir": "AF_OUT",
+      "peripheral": "SPI1_SCK",
+      "target": "J_SD CLK"
+    },
+    "PA6": {
+      "net": "SPI1_MISO",
+      "dir": "AF_IN",
+      "peripheral": "SPI1_MISO",
+      "target": "J_SD DO"
+    },
+    "PA7": {
+      "net": "SPI1_MOSI",
+      "dir": "AF_OUT",
+      "peripheral": "SPI1_MOSI",
+      "target": "J_SD DI"
+    },
+    "PA8": {
+      "net": "MCO_OUT",
+      "dir": "AF_OUT",
+      "peripheral": "RCC_MCO",
+      "target": "TP_MCO (8 MHz HSE check)"
+    },
+    "PA9": {
+      "net": "DBG_TX",
+      "dir": "AF_OUT",
+      "peripheral": "USART1_TX",
+      "target": "J_UART TX (HIL / Debug)"
+    },
+    "PA10": {
+      "net": "DBG_RX",
+      "dir": "AF_IN",
+      "peripheral": "USART1_RX",
+      "target": "J_UART RX (HIL / Debug)"
+    },
+    "PA13": {
+      "net": "SWDIO",
+      "dir": "SWD",
+      "peripheral": "SWD",
+      "target": "J_SWD Pin 2"
+    },
+    "PA14": {
+      "net": "SWCLK",
+      "dir": "SWD",
+      "peripheral": "SWD",
+      "target": "J_SWD Pin 3"
+    },
+    "PB0": {
+      "net": "SD_PWR_EN",
+      "dir": "DIGITAL_OUT",
+      "peripheral": "GPIOB.0",
+      "target": "Q_SD (AO3401) Gate Active-Low + TP_SD_EN"
+    },
+    "PB1": {
+      "net": "BAT_SENSE",
+      "dir": "ANALOG_IN",
+      "peripheral": "ADC1_IN9",
+      "target": "R_DIV1/R_DIV2 midpoint (VBAT/2)"
+    },
+    "PB5": {
+      "net": "BAT_SENSE_EN",
+      "dir": "DIGITAL_OUT",
+      "peripheral": "GPIOB.5",
+      "target": "Q_BAT (2N7002) Gate Active-High"
+    },
+    "PB6": {
+      "net": "I2C1_SCL",
+      "dir": "AF_OD",
+      "peripheral": "I2C1_SCL",
+      "target": "U_INA (INA219 @ 0x40) SCL"
+    },
+    "PB7": {
+      "net": "I2C1_SDA",
+      "dir": "AF_OD",
+      "peripheral": "I2C1_SDA",
+      "target": "U_INA (INA219 @ 0x40) SDA"
+    },
+    "PB12": {
+      "net": "WAKE_BTN",
+      "dir": "DIGITAL_IN",
+      "peripheral": "EXTI12",
+      "target": "SW_WAKE (Active-Low, 100k pull-up, 100nF)"
+    },
+    "NRST": {
+      "net": "NRST",
+      "dir": "RESET",
+      "peripheral": "SYS_RST",
+      "target": "SW_RST + J_SWD Pin 4 + C_RST 100nF"
+    }
+  },
+  "interactive_controls": {
+    "buttons": [
+      {
+        "designator": "SW_RST",
+        "x_mm": 33.5,
+        "y_mm": 6.5,
+        "rotation_deg": 0.0,
+        "footprint": "SW_SMD_TS1187A"
+      },
+      {
+        "designator": "SW_WAKE",
+        "x_mm": 43.5,
+        "y_mm": 6.5,
+        "rotation_deg": 0.0,
+        "footprint": "SW_SMD_TS1187A"
+      }
+    ],
+    "jumpers": [
+      {
+        "designator": "J_RLD",
+        "x_mm": 11.04,
+        "y_mm": 13.0,
+        "rotation_deg": 0.0,
+        "footprint": "HDR_1X3_P2.54"
+      },
+      {
+        "designator": "J_IMEAS",
+        "x_mm": 57.27,
+        "y_mm": 51.0,
+        "rotation_deg": 0.0,
+        "footprint": "HDR_1X2_P2.54"
+      }
+    ],
+    "connectors": [
+      {
+        "designator": "J_ECG",
+        "x_mm": 9.4,
+        "y_mm": 26.0,
+        "rotation_deg": 90.0,
+        "footprint": "JACK_3.5MM_PJ313E"
+      },
+      {
+        "designator": "J_USB",
+        "x_mm": 77.278,
+        "y_mm": 40.5,
+        "rotation_deg": 90.0,
+        "footprint": "USB_C_16P_2MD073"
+      },
+      {
+        "designator": "J_SD",
+        "x_mm": 72.79,
+        "y_mm": 16.15,
+        "rotation_deg": 90.0,
+        "footprint": "TF-01A"
+      },
+      {
+        "designator": "J_BAT",
+        "x_mm": 68.5,
+        "y_mm": 52.0,
+        "rotation_deg": 0.0,
+        "footprint": "JST_B2B-PH-K-S"
+      },
+      {
+        "designator": "J_SWD",
+        "x_mm": 45.42,
+        "y_mm": 51.0,
+        "rotation_deg": 180.0,
+        "footprint": "HDR_1X5_P2.54"
+      },
+      {
+        "designator": "J_UART",
+        "x_mm": 54.04,
+        "y_mm": 5.0,
+        "rotation_deg": 0.0,
+        "footprint": "HDR_1X3_P2.54"
+      }
+    ],
+    "indicators": [
+      {
+        "designator": "LED_STAT",
+        "x_mm": 60.5,
+        "y_mm": 46.5,
+        "rotation_deg": 0.0,
+        "footprint": "CHIP_0603"
+      }
+    ],
+    "testpoints": [
+      {
+        "designator": "TP_ECG_OUT",
+        "x_mm": 29.0,
+        "y_mm": 22.5,
+        "rotation_deg": 0.0,
+        "footprint": "TESTPOINT_1MM"
+      },
+      {
+        "designator": "TP_MCO",
+        "x_mm": 52.0,
+        "y_mm": 24.5,
+        "rotation_deg": 0.0,
+        "footprint": "TESTPOINT_1MM"
+      },
+      {
+        "designator": "TP_SD_EN",
+        "x_mm": 43.5,
+        "y_mm": 14.5,
+        "rotation_deg": 0.0,
+        "footprint": "TESTPOINT_1MM"
+      }
+    ]
+  },
+  "circuit_parameters": {
+    "power": {
+      "vbus_nominal_v": 5.0,
+      "vbat_nominal_v": 3.7,
+      "vbat_full_v": 4.2,
+      "vbat_empty_v": 3.0,
+      "battery_capacity_mah": 500.0,
+      "battery_r_int_ohm": 0.12,
+      "r_prog_ohm": 4700.0,
+      "mcp73831_ichg_ma": 212.77,
+      "ldo_vout_v": 3.3,
+      "ldo_dropout_v": 0.178,
+      "ldo_iq_ua": 1.6,
+      "r_shunt_ohm": 0.1,
+      "ina219_i2c_addr": 64,
+      "ina219_shunt_lsb_uv": 10.0,
+      "ina219_current_resolution_ua": 100.0,
+      "ina219_iq_active_ua": 700.0,
+      "ina219_iq_powerdown_ua": 6.0,
+      "r_div1_ohm": 100000.0,
+      "r_div2_ohm": 100000.0,
+      "bat_divider_ratio": 0.5,
+      "c_sd1_f": 4.7e-06
+    },
+    "afe_ad8232": {
+      "ia_gain": 100.0,
+      "r_g1_ohm": 1000000.0,
+      "r_g2_ohm": 100000.0,
+      "opamp_gain": 11.0,
+      "total_gain": 1100.0,
+      "c_hp1_f": 3.3e-07,
+      "c_hp2_f": 3.3e-07,
+      "r_hp1_ohm": 10000000.0,
+      "r_hp2_ohm": 10000000.0,
+      "r_hp3_ohm": 1400000.0,
+      "hpf_fc_hz": 0.482,
+      "r_lp1_ohm": 1000000.0,
+      "r_lp2_ohm": 1000000.0,
+      "c_lp1_f": 1.5000000000000002e-09,
+      "c_lp2_f": 1e-08,
+      "lpf_fc_hz": 41.09,
+      "vref_ratio": 0.5,
+      "iq_active_ua": 170.0,
+      "iq_shutdown_ua": 0.5,
+      "input_noise_uvpp": 14.0,
+      "cmrr_active_rld_db": 80.0,
+      "cmrr_vref_gnd_db": 42.0
+    },
+    "mcu_stm32f103c8t6": {
+      "flash_origin": "0x08000000",
+      "flash_size_bytes": 65536,
+      "sram_origin": "0x20000000",
+      "sram_size_bytes": 20480,
+      "hse_hz": 8000000.0,
+      "lse_hz": 32768.0,
+      "adc_bits": 12,
+      "adc_max": 4095,
+      "i_stop_ua": 24.0,
+      "i_sleep_8mhz_ma": 1.8,
+      "i_run_8mhz_ma": 4.2,
+      "i_run_72mhz_ma": 27.0
+    }
+  },
+  "components": [
+    {
+      "designator": "C_A1",
+      "comment": "1uF",
+      "numeric_value": 1e-06,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 29.5,
+      "y_mm": 46.5,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_A2",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 26.5,
+      "y_mm": 46.5,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_A3",
+      "comment": "10nF",
+      "numeric_value": 1e-08,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 23.5,
+      "y_mm": 46.5,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_AFE_VDD",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 26.5,
+      "y_mm": 30.0,
+      "rotation_deg": 270.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_BAT",
+      "comment": "4.7uF",
+      "numeric_value": 4.7e-06,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 60.0,
+      "y_mm": 39.0,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_HP1",
+      "comment": "0.33uF",
+      "numeric_value": 3.3e-07,
+      "layer": "TopLayer",
+      "footprint": "CAP_0805",
+      "x_mm": 19.5,
+      "y_mm": 36.5,
+      "rotation_deg": 0.0,
+      "description": "Capacitor 0805 C0G/Film for HPF filter"
+    },
+    {
+      "designator": "C_HP2",
+      "comment": "0.33uF",
+      "numeric_value": 3.3e-07,
+      "layer": "TopLayer",
+      "footprint": "CAP_0805",
+      "x_mm": 12.5,
+      "y_mm": 39.5,
+      "rotation_deg": 0.0,
+      "description": "Capacitor 0805 C0G/Film for HPF filter"
+    },
+    {
+      "designator": "C_HSE1",
+      "comment": "20pF C0G",
+      "numeric_value": 2e-11,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 36.5,
+      "y_mm": 39.5,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_HSE2",
+      "comment": "20pF C0G",
+      "numeric_value": 2e-11,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 33.0,
+      "y_mm": 39.5,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_IN1",
+      "comment": "4.7uF",
+      "numeric_value": 4.7e-06,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 67.0,
+      "y_mm": 42.5,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_IN2",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 67.0,
+      "y_mm": 39.0,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_INA",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 56.0,
+      "y_mm": 38.5,
+      "rotation_deg": 270.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_LDO1",
+      "comment": "1uF",
+      "numeric_value": 1e-06,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 68.0,
+      "y_mm": 35.0,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_LDO2",
+      "comment": "1uF",
+      "numeric_value": 1e-06,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 60.5,
+      "y_mm": 35.0,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_LP1",
+      "comment": "1.5nF",
+      "numeric_value": 1.5000000000000002e-09,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 26.5,
+      "y_mm": 17.0,
+      "rotation_deg": 0.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_LP2",
+      "comment": "10nF",
+      "numeric_value": 1e-08,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 20.5,
+      "y_mm": 16.5,
+      "rotation_deg": 0.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_LSE1",
+      "comment": "10pF C0G",
+      "numeric_value": 1e-11,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 33.0,
+      "y_mm": 31.2,
+      "rotation_deg": 180.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_LSE2",
+      "comment": "10pF C0G",
+      "numeric_value": 1e-11,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 33.0,
+      "y_mm": 28.8,
+      "rotation_deg": 0.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_MCU1",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 48.0,
+      "y_mm": 18.0,
+      "rotation_deg": 270.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_MCU2",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 51.5,
+      "y_mm": 28.5,
+      "rotation_deg": 0.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_MCU3",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 41.5,
+      "y_mm": 33.0,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_MCU_BULK",
+      "comment": "4.7uF",
+      "numeric_value": 4.7e-06,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 41.5,
+      "y_mm": 36.5,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_REF",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 23.5,
+      "y_mm": 30.0,
+      "rotation_deg": 90.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_RLD",
+      "comment": "1nF",
+      "numeric_value": 1e-09,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 14.5,
+      "y_mm": 19.5,
+      "rotation_deg": 0.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_RST",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 37.5,
+      "y_mm": 21.5,
+      "rotation_deg": 270.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_SD1",
+      "comment": "4.7uF",
+      "numeric_value": 4.7e-06,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 63.0,
+      "y_mm": 25.5,
+      "rotation_deg": 0.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_SD2",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 63.0,
+      "y_mm": 23.0,
+      "rotation_deg": 0.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_SENSE",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 61.0,
+      "y_mm": 28.5,
+      "rotation_deg": 0.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_VDDA1",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 37.5,
+      "y_mm": 24.5,
+      "rotation_deg": 180.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_VDDA2",
+      "comment": "1uF",
+      "numeric_value": 1e-06,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 34.0,
+      "y_mm": 24.5,
+      "rotation_deg": 180.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "C_WAKE",
+      "comment": "100nF",
+      "numeric_value": 1.0000000000000001e-07,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 46.5,
+      "y_mm": 12.0,
+      "rotation_deg": 270.0,
+      "description": "C_0603"
+    },
+    {
+      "designator": "D1",
+      "comment": "SMAJ5.0A",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "DIODE_SMA_DO214AC",
+      "x_mm": 69.0,
+      "y_mm": 47.0,
+      "rotation_deg": 180.0,
+      "description": "DIODE_SMA_DO214AC"
+    },
+    {
+      "designator": "D_ESD1",
+      "comment": "BAV199",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "SOT23_3",
+      "x_mm": 18.5,
+      "y_mm": 30.5,
+      "rotation_deg": 270.0,
+      "description": "BAV199"
+    },
+    {
+      "designator": "D_ESD2",
+      "comment": "BAV199",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "SOT23_3",
+      "x_mm": 18.5,
+      "y_mm": 20.5,
+      "rotation_deg": 90.0,
+      "description": "BAV199"
+    },
+    {
+      "designator": "FB1",
+      "comment": "FB 600R@100MHz",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 33.5,
+      "y_mm": 46.5,
+      "rotation_deg": 180.0,
+      "description": "FB_0603"
+    },
+    {
+      "designator": "J_BAT",
+      "comment": "BAT_CONN_2P",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "JST_B2B-PH-K-S",
+      "x_mm": 68.5,
+      "y_mm": 52.0,
+      "rotation_deg": 0.0,
+      "description": "BAT_CONN_2P"
+    },
+    {
+      "designator": "J_ECG",
+      "comment": "PJ-313E",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "JACK_3.5MM_PJ313E",
+      "x_mm": 9.4,
+      "y_mm": 26.0,
+      "rotation_deg": 90.0,
+      "description": "3.5mm SMD Audio/ECG Jack"
+    },
+    {
+      "designator": "J_IMEAS",
+      "comment": "HEADER_1X2",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "HDR_1X2_P2.54",
+      "x_mm": 57.27,
+      "y_mm": 51.0,
+      "rotation_deg": 0.0,
+      "description": "HEADER_1X2"
+    },
+    {
+      "designator": "J_RLD",
+      "comment": "HEADER_1X3",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "HDR_1X3_P2.54",
+      "x_mm": 11.04,
+      "y_mm": 13.0,
+      "rotation_deg": 0.0,
+      "description": "HEADER_1X3"
+    },
+    {
+      "designator": "J_SD",
+      "comment": "TF-01A",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "TF-01A",
+      "x_mm": 72.79,
+      "y_mm": 16.15,
+      "rotation_deg": 90.0,
+      "description": "TF-01A"
+    },
+    {
+      "designator": "J_SWD",
+      "comment": "HEADER_SWD_5P",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "HDR_1X5_P2.54",
+      "x_mm": 45.42,
+      "y_mm": 51.0,
+      "rotation_deg": 180.0,
+      "description": "HEADER_SWD_5P"
+    },
+    {
+      "designator": "J_UART",
+      "comment": "HEADER_1X3",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "HDR_1X3_P2.54",
+      "x_mm": 54.04,
+      "y_mm": 5.0,
+      "rotation_deg": 0.0,
+      "description": "HEADER_1X3"
+    },
+    {
+      "designator": "J_USB",
+      "comment": "USB_C_16P_2MD073",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "USB_C_16P_2MD073",
+      "x_mm": 77.278,
+      "y_mm": 40.5,
+      "rotation_deg": 90.0,
+      "description": "USB_C_16P_2MD073"
+    },
+    {
+      "designator": "LED_STAT",
+      "comment": "RED",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 60.5,
+      "y_mm": 46.5,
+      "rotation_deg": 0.0,
+      "description": "LED_0603"
+    },
+    {
+      "designator": "Q_BAT",
+      "comment": "2N7002",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "SOT23_3",
+      "x_mm": 57.0,
+      "y_mm": 31.0,
+      "rotation_deg": 0.0,
+      "description": "N-Channel MOSFET 60V 0.3A SOT-23"
+    },
+    {
+      "designator": "Q_SD",
+      "comment": "AO3401",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "SOT23_3",
+      "x_mm": 58.0,
+      "y_mm": 24.5,
+      "rotation_deg": 0.0,
+      "description": "AO3401"
+    },
+    {
+      "designator": "R_BOOT0",
+      "comment": "10K",
+      "numeric_value": 10000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 44.0,
+      "y_mm": 33.0,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_BOOT1",
+      "comment": "10K",
+      "numeric_value": 10000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 45.5,
+      "y_mm": 18.0,
+      "rotation_deg": 270.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_CC1",
+      "comment": "5.1k",
+      "numeric_value": 5100.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 70.5,
+      "y_mm": 38.5,
+      "rotation_deg": 180.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_CC2",
+      "comment": "5.1k",
+      "numeric_value": 5100.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 70.5,
+      "y_mm": 42.0,
+      "rotation_deg": 180.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_DIV1",
+      "comment": "100K",
+      "numeric_value": 100000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 64.5,
+      "y_mm": 31.0,
+      "rotation_deg": 0.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_DIV2",
+      "comment": "100k",
+      "numeric_value": 100000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 61.0,
+      "y_mm": 31.0,
+      "rotation_deg": 0.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_G1",
+      "comment": "1M",
+      "numeric_value": 1000000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 27.0,
+      "y_mm": 20.0,
+      "rotation_deg": 180.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_G2",
+      "comment": "100K",
+      "numeric_value": 100000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 24.5,
+      "y_mm": 14.0,
+      "rotation_deg": 180.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_GATE",
+      "comment": "100k",
+      "numeric_value": 100000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 53.5,
+      "y_mm": 31.5,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_HP1",
+      "comment": "10M",
+      "numeric_value": 10000000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 20.5,
+      "y_mm": 40.0,
+      "rotation_deg": 270.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_HP2",
+      "comment": "10M",
+      "numeric_value": 10000000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 23.5,
+      "y_mm": 40.0,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_HP3",
+      "comment": "1.4M",
+      "numeric_value": 1400000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 17.0,
+      "y_mm": 40.0,
+      "rotation_deg": 270.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_IN_N",
+      "comment": "180K",
+      "numeric_value": 180000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 18.0,
+      "y_mm": 24.5,
+      "rotation_deg": 0.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_IN_P",
+      "comment": "180K",
+      "numeric_value": 180000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 18.0,
+      "y_mm": 26.5,
+      "rotation_deg": 0.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_LED",
+      "comment": "1K",
+      "numeric_value": 1000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 63.0,
+      "y_mm": 49.0,
+      "rotation_deg": 180.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_LO_N",
+      "comment": "10M",
+      "numeric_value": 10000000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 11.0,
+      "y_mm": 32.5,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_LO_P",
+      "comment": "10M",
+      "numeric_value": 10000000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 14.5,
+      "y_mm": 32.5,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_LP1",
+      "comment": "1M",
+      "numeric_value": 1000000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 23.5,
+      "y_mm": 17.0,
+      "rotation_deg": 0.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_LP2",
+      "comment": "1M",
+      "numeric_value": 1000000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 23.5,
+      "y_mm": 19.5,
+      "rotation_deg": 0.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_PROG",
+      "comment": "4.7K",
+      "numeric_value": 4700.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 63.5,
+      "y_mm": 46.0,
+      "rotation_deg": 270.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_PU1",
+      "comment": "4.7K",
+      "numeric_value": 4700.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 46.5,
+      "y_mm": 34.5,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_PU2",
+      "comment": "4.7K",
+      "numeric_value": 4700.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 46.5,
+      "y_mm": 37.5,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_REF1",
+      "comment": "10M",
+      "numeric_value": 10000000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 26.5,
+      "y_mm": 33.5,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_REF2",
+      "comment": "10M",
+      "numeric_value": 10000000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 23.5,
+      "y_mm": 33.5,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_RLD",
+      "comment": "360K",
+      "numeric_value": 360000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 5.0,
+      "y_mm": 18.0,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_SD1",
+      "comment": "47K",
+      "numeric_value": 47000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 62.5,
+      "y_mm": 18.5,
+      "rotation_deg": 180.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_SD2",
+      "comment": "47K",
+      "numeric_value": 47000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 62.5,
+      "y_mm": 16.5,
+      "rotation_deg": 0.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_SD3",
+      "comment": "47K",
+      "numeric_value": 47000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 62.5,
+      "y_mm": 14.5,
+      "rotation_deg": 0.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_SD4",
+      "comment": "47K",
+      "numeric_value": 47000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 62.5,
+      "y_mm": 12.5,
+      "rotation_deg": 0.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_SD5",
+      "comment": "47K",
+      "numeric_value": 47000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 62.5,
+      "y_mm": 20.5,
+      "rotation_deg": 0.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_SD_G",
+      "comment": "100K",
+      "numeric_value": 100000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 54.5,
+      "y_mm": 24.5,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "R_SHUNT",
+      "comment": "0.1R 1%",
+      "numeric_value": 0.1,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 57.0,
+      "y_mm": 44.0,
+      "rotation_deg": 90.0,
+      "description": "Current Sense Resistor 0.1 Ohm 1% 0603"
+    },
+    {
+      "designator": "R_WAKE",
+      "comment": "100K",
+      "numeric_value": 100000.0,
+      "layer": "TopLayer",
+      "footprint": "CHIP_0603",
+      "x_mm": 49.5,
+      "y_mm": 12.0,
+      "rotation_deg": 90.0,
+      "description": "R_0603"
+    },
+    {
+      "designator": "SW_RST",
+      "comment": "SW_PUSH_4P",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "SW_SMD_TS1187A",
+      "x_mm": 33.5,
+      "y_mm": 6.5,
+      "rotation_deg": 0.0,
+      "description": "SW_PUSH_4P"
+    },
+    {
+      "designator": "SW_WAKE",
+      "comment": "SW_PUSH_4P",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "SW_SMD_TS1187A",
+      "x_mm": 43.5,
+      "y_mm": 6.5,
+      "rotation_deg": 0.0,
+      "description": "SW_PUSH_4P"
+    },
+    {
+      "designator": "TP_ECG_OUT",
+      "comment": "TESTPOINT",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "TESTPOINT_1MM",
+      "x_mm": 29.0,
+      "y_mm": 22.5,
+      "rotation_deg": 0.0,
+      "description": "TESTPOINT"
+    },
+    {
+      "designator": "TP_MCO",
+      "comment": "TESTPOINT",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "TESTPOINT_1MM",
+      "x_mm": 52.0,
+      "y_mm": 24.5,
+      "rotation_deg": 0.0,
+      "description": "TESTPOINT"
+    },
+    {
+      "designator": "TP_SD_EN",
+      "comment": "TESTPOINT",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "TESTPOINT_1MM",
+      "x_mm": 43.5,
+      "y_mm": 14.5,
+      "rotation_deg": 0.0,
+      "description": "TESTPOINT"
+    },
+    {
+      "designator": "U_AFE",
+      "comment": "AD8232",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "LFCSP20_4X4_P0.5",
+      "x_mm": 23.5,
+      "y_mm": 25.0,
+      "rotation_deg": 0.0,
+      "description": "AD8232"
+    },
+    {
+      "designator": "U_CHG",
+      "comment": "MCP73831",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "SOT23_5",
+      "x_mm": 63.0,
+      "y_mm": 42.0,
+      "rotation_deg": 0.0,
+      "description": "MCP73831"
+    },
+    {
+      "designator": "U_INA",
+      "comment": "INA219AIDR",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "SOIC8_3.9x4.9",
+      "x_mm": 51.5,
+      "y_mm": 42.5,
+      "rotation_deg": 0.0,
+      "description": "INA219"
+    },
+    {
+      "designator": "U_LDO",
+      "comment": "MCP1700-3.3V",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "SOT23_3",
+      "x_mm": 64.5,
+      "y_mm": 35.0,
+      "rotation_deg": 0.0,
+      "description": "LDO 3.3V 250mA, Iq 1.6uA."
+    },
+    {
+      "designator": "U_MCU",
+      "comment": "STM32F103C8T6",
+      "numeric_value": null,
+      "layer": "TopLayer",
+      "footprint": "LQFP48_7x7_P0.5",
+      "x_mm": 44.5,
+      "y_mm": 25.5,
+      "rotation_deg": 0.0,
+      "description": "STM32F103C8T6"
+    },
+    {
+      "designator": "Y1",
+      "comment": "8MHz",
+      "numeric_value": 8000000.0,
+      "layer": "TopLayer",
+      "footprint": "XTAL_5032_2P",
+      "x_mm": 35.0,
+      "y_mm": 36.0,
+      "rotation_deg": 180.0,
+      "description": "XTAL_8MHZ"
+    },
+    {
+      "designator": "Y2",
+      "comment": "32.768kHz",
+      "numeric_value": 32768.0,
+      "layer": "TopLayer",
+      "footprint": "XTAL_3215",
+      "x_mm": 36.5,
+      "y_mm": 30.0,
+      "rotation_deg": 270.0,
+      "description": "XTAL_32K768"
+    }
+  ],
+  "bom": [
+    {
+      "comment": "1uF",
+      "description": "C_0603",
+      "footprint": "CHIP_0603",
+      "libref": "C_0603",
+      "designators": [
+        "C_A1",
+        "C_LDO1",
+        "C_LDO2",
+        "C_VDDA2"
+      ],
+      "quantity": 4
+    },
+    {
+      "comment": "100nF",
+      "description": "C_0603",
+      "footprint": "CHIP_0603",
+      "libref": "C_0603",
+      "designators": [
+        "C_A2",
+        "C_AFE_VDD",
+        "C_IN2",
+        "C_INA",
+        "C_MCU1",
+        "C_MCU2",
+        "C_MCU3",
+        "C_REF",
+        "C_RST",
+        "C_SD2",
+        "C_SENSE",
+        "C_VDDA1",
+        "C_WAKE"
+      ],
+      "quantity": 13
+    },
+    {
+      "comment": "10nF",
+      "description": "C_0603",
+      "footprint": "CHIP_0603",
+      "libref": "C_0603",
+      "designators": [
+        "C_A3",
+        "C_LP2"
+      ],
+      "quantity": 2
+    },
+    {
+      "comment": "4.7uF",
+      "description": "C_0603",
+      "footprint": "CHIP_0603",
+      "libref": "C_0603",
+      "designators": [
+        "C_BAT",
+        "C_IN1",
+        "C_MCU_BULK",
+        "C_SD1"
+      ],
+      "quantity": 4
+    },
+    {
+      "comment": "0.33uF",
+      "description": "Capacitor 0805 C0G/Film for HPF filter",
+      "footprint": "CAP_0805",
+      "libref": "C_0805",
+      "designators": [
+        "C_HP1",
+        "C_HP2"
+      ],
+      "quantity": 2
+    },
+    {
+      "comment": "20pF C0G",
+      "description": "C_0603",
+      "footprint": "CHIP_0603",
+      "libref": "C_0603",
+      "designators": [
+        "C_HSE1",
+        "C_HSE2"
+      ],
+      "quantity": 2
+    },
+    {
+      "comment": "1.5nF",
+      "description": "C_0603",
+      "footprint": "CHIP_0603",
+      "libref": "C_0603",
+      "designators": [
+        "C_LP1"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "10pF C0G",
+      "description": "C_0603",
+      "footprint": "CHIP_0603",
+      "libref": "C_0603",
+      "designators": [
+        "C_LSE1",
+        "C_LSE2"
+      ],
+      "quantity": 2
+    },
+    {
+      "comment": "1nF",
+      "description": "C_0603",
+      "footprint": "CHIP_0603",
+      "libref": "C_0603",
+      "designators": [
+        "C_RLD"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "SMAJ5.0A",
+      "description": "DIODE_SMA_DO214AC",
+      "footprint": "DIODE_SMA_DO214AC",
+      "libref": "SMAJ5.0A",
+      "designators": [
+        "D1"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "BAV199",
+      "description": "BAV199",
+      "footprint": "SOT23_3",
+      "libref": "BAV199",
+      "designators": [
+        "D_ESD1",
+        "D_ESD2"
+      ],
+      "quantity": 2
+    },
+    {
+      "comment": "FB 600R@100MHz",
+      "description": "FB_0603",
+      "footprint": "CHIP_0603",
+      "libref": "FB_0603",
+      "designators": [
+        "FB1"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "BAT_CONN_2P",
+      "description": "BAT_CONN_2P",
+      "footprint": "JST_B2B-PH-K-S",
+      "libref": "BAT_CONN_2P",
+      "designators": [
+        "J_BAT"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "PJ-313E",
+      "description": "3.5mm SMD Audio/ECG Jack",
+      "footprint": "JACK_3.5MM_PJ313E",
+      "libref": "PJ-313E",
+      "designators": [
+        "J_ECG"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "HEADER_1X2",
+      "description": "HEADER_1X2",
+      "footprint": "HDR_1X2_P2.54",
+      "libref": "HEADER_1X2",
+      "designators": [
+        "J_IMEAS"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "HEADER_1X3",
+      "description": "HEADER_1X3",
+      "footprint": "HDR_1X3_P2.54",
+      "libref": "HEADER_1X3",
+      "designators": [
+        "J_RLD",
+        "J_UART"
+      ],
+      "quantity": 2
+    },
+    {
+      "comment": "TF-01A",
+      "description": "TF-01A",
+      "footprint": "TF-01A",
+      "libref": "TF-01A",
+      "designators": [
+        "J_SD"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "HEADER_SWD_5P",
+      "description": "HEADER_SWD_5P",
+      "footprint": "HDR_1X5_P2.54",
+      "libref": "HEADER_SWD_5P",
+      "designators": [
+        "J_SWD"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "USB_C_16P_2MD073",
+      "description": "USB_C_16P_2MD073",
+      "footprint": "USB_C_16P_2MD073",
+      "libref": "USB_C_16P_2MD073",
+      "designators": [
+        "J_USB"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "RED",
+      "description": "LED_0603",
+      "footprint": "CHIP_0603",
+      "libref": "LED_0603",
+      "designators": [
+        "LED_STAT"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "2N7002",
+      "description": "N-Channel MOSFET 60V 0.3A SOT-23",
+      "footprint": "SOT23_3",
+      "libref": "2N7002",
+      "designators": [
+        "Q_BAT"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "AO3401",
+      "description": "AO3401",
+      "footprint": "SOT23_3",
+      "libref": "AO3401",
+      "designators": [
+        "Q_SD"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "10K",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_BOOT0",
+        "R_BOOT1"
+      ],
+      "quantity": 2
+    },
+    {
+      "comment": "5.1k",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_CC1",
+        "R_CC2"
+      ],
+      "quantity": 2
+    },
+    {
+      "comment": "100K",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_DIV1",
+        "R_DIV2",
+        "R_G2",
+        "R_GATE",
+        "R_SD_G",
+        "R_WAKE"
+      ],
+      "quantity": 6
+    },
+    {
+      "comment": "1M",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_G1",
+        "R_LP1",
+        "R_LP2"
+      ],
+      "quantity": 3
+    },
+    {
+      "comment": "10M",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_HP1",
+        "R_HP2",
+        "R_LO_N",
+        "R_LO_P",
+        "R_REF1",
+        "R_REF2"
+      ],
+      "quantity": 6
+    },
+    {
+      "comment": "1.4M",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_HP3"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "180K",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_IN_N",
+        "R_IN_P"
+      ],
+      "quantity": 2
+    },
+    {
+      "comment": "1K",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_LED"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "4.7K",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_PROG",
+        "R_PU1",
+        "R_PU2"
+      ],
+      "quantity": 3
+    },
+    {
+      "comment": "360K",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_RLD"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "47K",
+      "description": "R_0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_0603",
+      "designators": [
+        "R_SD1",
+        "R_SD2",
+        "R_SD3",
+        "R_SD4",
+        "R_SD5"
+      ],
+      "quantity": 5
+    },
+    {
+      "comment": "0.1R 1%",
+      "description": "Current Sense Resistor 0.1 Ohm 1% 0603",
+      "footprint": "CHIP_0603",
+      "libref": "R_SHUNT_0R1",
+      "designators": [
+        "R_SHUNT"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "SW_PUSH_4P",
+      "description": "SW_PUSH_4P",
+      "footprint": "SW_SMD_TS1187A",
+      "libref": "SW_PUSH_4P",
+      "designators": [
+        "SW_RST",
+        "SW_WAKE"
+      ],
+      "quantity": 2
+    },
+    {
+      "comment": "TESTPOINT",
+      "description": "TESTPOINT",
+      "footprint": "TESTPOINT_1MM",
+      "libref": "TESTPOINT",
+      "designators": [
+        "TP_ECG_OUT",
+        "TP_MCO",
+        "TP_SD_EN"
+      ],
+      "quantity": 3
+    },
+    {
+      "comment": "AD8232",
+      "description": "AD8232",
+      "footprint": "LFCSP20_4X4_P0.5",
+      "libref": "AD8232",
+      "designators": [
+        "U_AFE"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "MCP73831",
+      "description": "MCP73831",
+      "footprint": "SOT23_5",
+      "libref": "MCP73831",
+      "designators": [
+        "U_CHG"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "INA219AIDR",
+      "description": "INA219",
+      "footprint": "SOIC8_3.9x4.9",
+      "libref": "INA219",
+      "designators": [
+        "U_INA"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "MCP1700-3.3V",
+      "description": "LDO 3.3V 250mA, Iq 1.6uA.",
+      "footprint": "SOT23_3",
+      "libref": "MCP1700",
+      "designators": [
+        "U_LDO"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "STM32F103C8T6",
+      "description": "STM32F103C8T6",
+      "footprint": "LQFP48_7x7_P0.5",
+      "libref": "STM32F103C8T6",
+      "designators": [
+        "U_MCU"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "8MHz",
+      "description": "XTAL_8MHZ",
+      "footprint": "XTAL_5032_2P",
+      "libref": "XTAL_8MHZ",
+      "designators": [
+        "Y1"
+      ],
+      "quantity": 1
+    },
+    {
+      "comment": "32.768kHz",
+      "description": "XTAL_32K768",
+      "footprint": "XTAL_3215",
+      "libref": "XTAL_32K768",
+      "designators": [
+        "Y2"
+      ],
+      "quantity": 1
+    }
+  ]
+}

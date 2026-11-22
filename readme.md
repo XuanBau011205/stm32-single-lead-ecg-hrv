@@ -95,6 +95,6 @@ A battery-powered, electrically safe **single-lead ECG acquisition & real-time H
 ---
 
 <p align="center">
-  <img src="qr_code.png" alt="GitHub Repository QR Code" width="130" /><br/>
-  <sub><b>Scan QR to open repository:</b> https://github.com/XuanBau011205/stm32-single-lead-ecg-hrv</sub>
+  <img src="qr_code.png" alt="Embedded Systems Portfolio QR Code" width="130" /><br/>
+  <sub><b>Scan QR to view full Portfolio:</b> <a href="https://github.com/XuanBau011205/bau-portfolio">https://github.com/XuanBau011205/bau-portfolio</a></sub>
 </p>

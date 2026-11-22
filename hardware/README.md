@@ -36,7 +36,7 @@ Tất cả footprint linh kiện dán (SMD) trong `lib/` bắt buộc tuân th�
   - `AD8232ACPZ`: `LFCSP-WQ-20` (4x4 mm, 20 chân, exposed pad)
   - `MCP1700T-3302E/TT`: `SOT23-3`
   - `AO3401A` (P-MOSFET): `SOT23-3`
-  - `INA219AIDCNR`: `SOT23-8`
+  - `INA219AIDR`: `SOIC-8`
 
 ### 2.3. Quy ước Hướng Chân 1 (Pin 1 Orientation) & 3D Model
 - Chân 1 của IC dạng QFP, QFN luôn đặt ở góc trên bên trái (Top-Left) theo chuẩn IPC-7351B.

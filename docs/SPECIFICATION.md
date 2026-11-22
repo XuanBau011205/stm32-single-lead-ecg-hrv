@@ -17,7 +17,7 @@ Dự án thiết kế một thiết bị ghi điện tim 1 đạo trình chạy 
 | **Độ nhạy ($\text{Se}$) & Giá trị dự đoán dương ($\text{PPV}$)** | $\ge 99\%$ trên các bản ghi chọn lọc | Bộ dữ liệu chuẩn **MIT-BIH Arrhythmia Database** (nạp qua UART) |
 | **Sai số khoảng cách đỉnh R ($\text{MAE}_{RR}$)** | $\le 5\ \text{ms}$ | Đai ngực **Polar H10** / Máy ECG chuẩn ($\ge 15$ tình nguyện viên) |
 | **Giới hạn đồng thuận nhịp tim (LoA 95% HR)** | Nằm trong khoảng $\pm 2\ \text{bpm}$ | Phân tích **Bland–Altman** (5 phút nghỉ + 5 phút sau vận động) |
-| **Dòng ngủ toàn mạch (Stop Mode)** | $\le 1{,}5 \times (I_{\mathrm{MCU\,Stop}} + \sum I_q) \approx 48{,}15\ \mu\text{A}$ | **Nordic PPK2** chèn qua jumper `J_IMEAS` & IC `INA219` trên bo |
+| **Dòng ngủ toàn mạch (Stop Mode)** | $\le 1{,}5 \times (I_{\mathrm{MCU\,Stop}} + \sum I_q) \approx 48{,}15\ \mu\text{A}$ | **Nordic PPK2** chèn qua jumper `J_IMEAS` (IC `INA219` trên bo có độ phân giải $100\ \mu\text{A}$ với trở shunt $0{,}1\ \Omega$ nên không đo được mức $\mu\text{A}$, chỉ dùng đo dòng động khi hoạt động) |
 
 ---
 
@@ -54,10 +54,12 @@ Hệ thống loại bỏ hoàn toàn các khối ngoại vi rườm rà (màn h�
 | **Lưu trữ (`microSD`)** | `PA4..PA7` | `SD_CS`, `SPI1_SCK/MISO/MOSI` | Giao tiếp SPI1 ghi dữ liệu thô & chuỗi RR theo khối 512 bytes. |
 | | `PB0` | `SD_PWR_EN` | Điều khiển cực Gate P-MOSFET `AO3401` ngắt nguồn thẻ SD; có **`TP_SD_EN`**. |
 | **Đo dòng tích hợp (`INA219`)** | `PB6`, `PB7` | `I2C1_SCL`, `I2C1_SDA` | Đọc dòng/áp tiêu thụ trên rail chính để đối chiếu với PPK2. |
-| **Đo áp pin (`VBAT`)** | `PB1` (`ADC1_IN9`) | `BAT_SENSE` | Đo áp pin qua cầu phân áp có MOSFET ngắt chống rò dòng khi ngủ. |
+| **Đo áp pin (`VBAT`)** | `PB1` (`ADC1_IN9`) | `BAT_SENSE` | Đo áp pin qua cầu phân áp tỷ lệ 1:2 ($100\text{ k}\Omega / 100\text{ k}\Omega$). |
+| | `PB5` | `BAT_SENSE_EN` | Điều khiển cực Gate N-MOSFET `2N7002` để ngắt cầu phân áp chống rò dòng khi ngủ sâu. |
 | **Giao tiếp & Debug** | `PA9`, `PA10` | `DBG_TX`, `DBG_RX` | Header UART1 dùng cho luồng nạp dữ liệu chuẩn MIT-BIH (HIL Test). |
 | | `PA13`, `PA14`, `NRST` | `SWDIO`, `SWCLK`, `NRST` | Header nạp và gỡ lỗi chuẩn SWD. |
 | | `PA8` | `MCO_OUT` | Đưa ra chốt đo **`TP_MCO`** để kiểm tra xung nhịp HSE khi bring-up. |
+| **Điều khiển người dùng** | `PB12` (`EXTI12`) | `WAKE_BTN` | Nút nhấn đánh thức MCU khỏi `Stop Mode` và bắt đầu/dừng phiên đo (kéo lên $100\text{ k}\Omega$ về `3V3_MAIN`, tụ chống dội $100\text{ nF}$, dòng rò $0\ \mu\text{A}$ khi không nhấn). |
 
 ### Tính toán tụ tải thạch anh (Crystal Load Capacitance)
 Công thức tính tụ tải cho thạch anh ngoài:

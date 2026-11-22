@@ -25,6 +25,7 @@ data/calib/*.bin
 data/test/*.csv
 data/test/*.bin
 *.csv
+!hardware/bom/*.csv
 
 # Altium Designer backup & temporary files
 History/
@@ -33,10 +34,19 @@ __Previews/
 *.PcbDocPreview
 *.Dat
 *.zip
+!hardware/gerber/*.zip
 *.html
+*.htm
 *.log
 *.~*
 *.Backups
+*.Cam
+*.ERR
+*.cmp
+*.PrjPcbStructure
+Project Outputs for */
+Project Logs for */
+Altium Designer Message List *.Txt
 
 # IDE & Editor files
 .vscode/
@@ -44,3 +54,9 @@ __Previews/
 *.swp
 *.swo
 compile_commands.json
+
+# Internal agent instructions & scratch reports (local only)
+Rule/
+hardware/BAO_CAO_KIEM_TRA_THU_VIEN.md
+hardware/TONG_KET_THU_VIEN_P05.md
+hardware/remaining_components.md

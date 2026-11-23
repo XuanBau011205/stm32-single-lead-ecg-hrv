@@ -55,3 +55,54 @@ target_compile_options(test_dsp_core PRIVATE
 )
 
 add_test(NAME dsp_core_unit_tests COMMAND test_dsp_core)
+
+add_executable(test_hrv_analyzer
+    test_hrv_analyzer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP/hrv_analyzer.cpp
+)
+
+target_include_directories(test_hrv_analyzer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../HIL
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP
+)
+
+target_compile_options(test_hrv_analyzer PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+    -Wpedantic
+    -Wconversion
+    -Wshadow
+    -fno-exceptions
+    -fno-rtti
+)
+
+add_test(NAME hrv_analyzer_unit_tests COMMAND test_hrv_analyzer)
+
+add_executable(test_hil_session
+    test_hil_session.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../HIL/boundary_parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../HIL/hil_session.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP/iir_filter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP/parabolic_interp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP/pan_tompkins.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP/hrv_analyzer.cpp
+)
+
+target_include_directories(test_hil_session PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../HIL
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP
+)
+
+target_compile_options(test_hil_session PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+    -Wpedantic
+    -Wconversion
+    -Wshadow
+    -fno-exceptions
+    -fno-rtti
+)
+
+add_test(NAME hil_session_integration_tests COMMAND test_hil_session)

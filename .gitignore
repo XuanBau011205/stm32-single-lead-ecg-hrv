@@ -57,6 +57,7 @@ compile_commands.json
 
 # Internal agent instructions & scratch reports (local only)
 Rule/
+tai_lieu_tinh_nang/
 hardware/BAO_CAO_KIEM_TRA_THU_VIEN.md
 hardware/TONG_KET_THU_VIEN_P05.md
 hardware/remaining_components.md

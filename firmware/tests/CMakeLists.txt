@@ -106,3 +106,35 @@ target_compile_options(test_hil_session PRIVATE
 )
 
 add_test(NAME hil_session_integration_tests COMMAND test_hil_session)
+
+add_executable(test_platform_adapter
+    test_platform_adapter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Core/sd_block_formatter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Core/sensor_storage_boundary.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Core/platform_controller.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../HIL/boundary_parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../HIL/hil_session.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP/iir_filter.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP/parabolic_interp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP/pan_tompkins.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP/hrv_analyzer.cpp
+)
+
+target_include_directories(test_platform_adapter PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../Core
+    ${CMAKE_CURRENT_SOURCE_DIR}/../HIL
+    ${CMAKE_CURRENT_SOURCE_DIR}/../DSP
+)
+
+target_compile_options(test_platform_adapter PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+    -Wpedantic
+    -Wconversion
+    -Wshadow
+    -fno-exceptions
+    -fno-rtti
+)
+
+add_test(NAME platform_adapter_mock_tests COMMAND test_platform_adapter)

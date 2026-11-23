@@ -4,6 +4,32 @@
 
 namespace p05::stm32 {
 
+namespace {
+
+void spin_cycles(uint32_t iters) noexcept {
+    for (volatile uint32_t i = 0U; i < iters; ++i) {
+    }
+}
+
+void calibrate_adc1() noexcept {
+    // RM0008 section 11.4: wake ADC1, wait t_STAB, reset calibration, then run calibration
+    adc1()->CR2 |= (1U << 0U);  // ADON = 1
+    spin_cycles(250U);
+    adc1()->CR2 |= (1U << 3U);  // RSTCAL
+    for (uint32_t w = 0U; w < 100000U && (adc1()->CR2 & (1U << 3U)) != 0U; ++w) {
+    }
+    adc1()->CR2 |= (1U << 2U);  // CAL
+    for (uint32_t w = 0U; w < 100000U && (adc1()->CR2 & (1U << 2U)) != 0U; ++w) {
+    }
+}
+
+void wait_spi1_not_busy() noexcept {
+    for (uint32_t w = 0U; w < 100000U && (spi1()->SR & (1U << 7U)) != 0U; ++w) {
+    }
+}
+
+}  // namespace
+
 std::atomic<uint32_t> Stm32F103PlatformHw::s_uptime_ms_{0U};
 
 void Stm32F103PlatformHw::isr_on_systick() noexcept {
@@ -84,9 +110,11 @@ void Stm32F103PlatformHw::set_clock_profile(PowerClockProfile profile) noexcept 
     }
 
     if (profile == PowerClockProfile::Run72MHzSoftFloat) {
-        // 2 Flash wait states, PPRE1 = /2 (36 MHz), PLL = HSE x 9 = 72 MHz, MCO = HSE (8 MHz)
+        // 2 Flash wait states, PPRE1 = /2 (36 MHz), ADCPRE = /6 (12 MHz <= 14 MHz limit),
+        // PLL = HSE x 9 = 72 MHz, MCO = HSE (8 MHz)
         flash()->ACR = 0x12U;
-        rcc()->CFGR = (0x6U << 24U) | (0x7U << 18U) | (1U << 16U) | (0x4U << 8U);
+        rcc()->CFGR =
+            (0x6U << 24U) | (0x7U << 18U) | (1U << 16U) | (0x2U << 14U) | (0x4U << 8U);
         rcc()->CR |= (1U << 24U);  // PLLON
         while ((rcc()->CR & (1U << 25U)) == 0U) {
         }
@@ -125,6 +153,11 @@ void Stm32F103PlatformHw::enter_sleep_wfi() noexcept {
 }
 
 void Stm32F103PlatformHw::configure_unused_gpio_analog_keep_pb12() noexcept {
+    // Disable USART1 and I2C1 before switching PA9/PA10 and PB6/PB7 to Analog Input
+    // so floating/pulled lines cannot fire spurious UART RX break IRQs or I2C glitches.
+    usart1()->CR1 = 0U;
+    i2c1()->CR1 = 0U;
+
     // Put all unused pins on Port A, B, C to Analog Input (0 uA Stop Mode leak).
     // Preserve PA3 (ECG_SDN=LOW), PB0 (SD_PWR_EN=HIGH), PB5 (BAT_SENSE_EN=LOW),
     // PB12 (SW_WAKE EXTI12 floating with external 100k pull-up), PA13/PA14 (SWD).
@@ -161,15 +194,24 @@ void Stm32F103PlatformHw::configure_unused_gpio_analog_keep_pb12() noexcept {
 }
 
 void Stm32F103PlatformHw::enter_stop_mode_wfi() noexcept {
-    // PWR->CR: PDDS = 0 (Stop Mode), LPDS = 1 (Low-Power Regulator) -> 24 uA MCU Stop
-    rcc()->APB1ENR |= (1U << 28U);
-    pwr()->CR = (pwr()->CR & ~(1U << 1U)) | (1U << 0U);
+    // Enable PWREN | BKPEN, allow Backup Domain write (DBP), and enable LSE 32.768 kHz RTC (SPEC 4.A).
+    // PWR->CR: PDDS = 0 (Stop Mode), LPDS = 1 (Low-Power Regulator) -> 24 uA MCU Stop.
+    rcc()->APB1ENR |= (1U << 28U) | (1U << 27U);
+    pwr()->CR = (pwr()->CR & ~(1U << 1U)) | (1U << 0U) | (1U << 8U);
+    rcc()->BDCR |= (1U << 0U);  // LSEON
+
+    // Disable SysTick TICKINT so SysTick cannot wake WFI; clear pending EXTI12 before sleep.
+    const uint32_t prev_systick_ctrl = systick()->CTRL;
+    systick()->CTRL = prev_systick_ctrl & ~(1U << 1U);
+    exti()->PR = (1U << 12U);
+
     scb()->SCR |= (1U << 2U);  // SLEEPDEEP = 1
 #if defined(__arm__) || defined(__thumb__)
     asm volatile("dsb" ::: "memory");
     asm volatile("wfi" ::: "memory");
 #endif
     scb()->SCR &= ~(1U << 2U);
+    systick()->CTRL = prev_systick_ctrl;
 }
 
 void Stm32F103PlatformHw::set_afe_enable(bool enable) noexcept {
@@ -203,10 +245,13 @@ void Stm32F103PlatformHw::start_ecg_adc_dma(int16_t* dst_490, uint16_t fs_hz) no
     ch1.CCR = (1U << 10U) | (1U << 8U) | (1U << 7U) | (1U << 5U) | (1U << 2U) | (1U << 1U) | 1U;
     *nvic_iser0() = (1U << 11U);  // IRQ11 = DMA1_Channel1
 
-    // 2. ADC1: Channel 0 (PA0), EXTTRIG = TIM3 TRGO (EXTSEL = 100b), DMA = 1, ADON = 1
+    // 2. ADC1: power on + self-calibrate, then configure Channel 0 (PA0) + TIM3 TRGO + DMA
+    adc1()->CR2 = 0U;
+    calibrate_adc1();
     adc1()->SQR1 = 0U;
     adc1()->SQR3 = 0U;            // IN0
     adc1()->SMPR2 = (0x5U << 0U); // 55.5 cycles sample time
+    adc1()->SR = 0U;
     adc1()->CR2 = (1U << 20U) | (0x4U << 17U) | (1U << 8U) | (1U << 0U);
 
     // 3. TIM3 TRGO on Update event at exact fs_hz (250 Hz or 500 Hz)
@@ -228,6 +273,7 @@ void Stm32F103PlatformHw::stop_ecg_adc_dma() noexcept {
 void Stm32F103PlatformHw::set_bat_sense_enable(bool enable) noexcept {
     if (enable) {
         gpiob()->BSRR = (1U << 5U);
+        spin_cycles(400U);  // Allow 100k/100k + ADC pin RC settling after 2N7002 turns ON
     } else {
         gpiob()->BRR = (1U << 5U);
     }
@@ -235,31 +281,53 @@ void Stm32F103PlatformHw::set_bat_sense_enable(bool enable) noexcept {
 
 bool Stm32F103PlatformHw::read_bat_sense_adc(uint16_t& raw_adc_out) noexcept {
     rcc()->APB2ENR |= (1U << 9U);  // ADC1EN
-    // Save/pause DMA trigger briefly and perform single SWSTART conversion on ADC1_IN9 (PB1)
+    // Pause TIM3 trigger cleanly so ECG DMA buffer cannot capture BAT_SENSE channel 9
+    const uint32_t prev_tim3_cr1 = tim3()->CR1;
+    tim3()->CR1 = prev_tim3_cr1 & ~1U;
+
     const uint32_t prev_cr2 = adc1()->CR2;
     const uint32_t prev_sqr3 = adc1()->SQR3;
+    const uint32_t prev_smpr2 = adc1()->SMPR2;
 
-    adc1()->SQR3 = 9U;  // PB1 = ADC1_IN9
-    adc1()->SMPR2 |= (0x5U << 27U);
+    if ((prev_cr2 & 1U) == 0U) {
+        adc1()->CR2 = 0U;
+        calibrate_adc1();
+    }
+
+    // Configure Channel 9 (PB1) with 239.5 cycles for high-impedance 100k/100k divider, DMA=0
+    adc1()->SQR3 = 9U;
+    adc1()->SMPR2 = (prev_smpr2 & ~(0x7U << 27U)) | (0x7U << 27U);
     adc1()->SR = 0U;
-    adc1()->CR2 = (1U << 20U) | (0x7U << 17U) | (1U << 0U);  // SWSTART
-    adc1()->CR2 |= (1U << 22U);
+    adc1()->CR2 = (1U << 20U) | (0x7U << 17U) | (1U << 0U);  // EXTTRIG | SWSTART sel | ADON
+    adc1()->CR2 |= (1U << 22U);                              // SWSTART trigger
 
     const uint32_t t0 = uptime_ms();
+    bool ok = true;
     while ((adc1()->SR & (1U << 1U)) == 0U) {
         if ((uptime_ms() - t0) > 10U) {
-            adc1()->SQR3 = prev_sqr3;
-            adc1()->CR2 = prev_cr2;
-            return false;
+            ok = false;
+            break;
         }
     }
-    raw_adc_out = static_cast<uint16_t>(adc1()->DR & 0x0FFFU);
+    if (ok) {
+        raw_adc_out = static_cast<uint16_t>(adc1()->DR & 0x0FFFU);
+    }
+
+    // Restore ADC1 without writing ADON 1->1 (which would inject an unscheduled conversion into DMA)
+    adc1()->CR2 = 0U;
     adc1()->SQR3 = prev_sqr3;
-    adc1()->CR2 = prev_cr2;
-    return true;
+    adc1()->SMPR2 = prev_smpr2;
+    adc1()->SR = 0U;
+    if ((prev_cr2 & 1U) != 0U) {
+        adc1()->CR2 = prev_cr2;  // 0->1 wakes ADC from power-down without triggering conversion
+        spin_cycles(250U);
+    }
+    tim3()->CR1 = prev_tim3_cr1;
+    return ok;
 }
 
 void Stm32F103PlatformHw::set_spi1_pins_analog() noexcept {
+    wait_spi1_not_busy();
     spi1()->CR1 &= ~(1U << 6U);  // SPE = 0
     gpio_set_mode(gpioa(), 4U, kGpioAnalog);
     gpio_set_mode(gpioa(), 5U, kGpioAnalog);
@@ -308,13 +376,19 @@ uint8_t Stm32F103PlatformHw::sd_send_cmd(uint8_t cmd, uint32_t arg, uint8_t crc)
 }
 
 bool Stm32F103PlatformHw::sd_init_card() noexcept {
-    // Configure SPI1 on PA4 (CS), PA5 (SCK), PA6 (MISO), PA7 (MOSI) (OPEN-21)
+    // Configure SPI1 on PA4 (CS), PA5 (SCK), PA6 (MISO pull-up), PA7 (MOSI) (OPEN-21)
     rcc()->APB2ENR |= (1U << 2U) | (1U << 12U);  // IOPAEN | SPI1EN
     gpio_set_mode(gpioa(), 4U, kGpioOutPp2MHz);
     gpio_set_mode(gpioa(), 5U, kGpioAfPp50MHz);
-    gpio_set_mode(gpioa(), 6U, kGpioInputFloat);
+    gpio_set_mode(gpioa(), 6U, kGpioInputPull);
+    gpioa()->BSRR = (1U << 6U);  // Pull-up on PA6 MISO per SD SPI spec
     gpio_set_mode(gpioa(), 7U, kGpioAfPp50MHz);
     sd_cs_high();
+
+    // Wait >= 2 ms for SD power-up ramp after AO3401 enables VDD_SD
+    const uint32_t pwr_t0 = uptime_ms();
+    while ((uptime_ms() - pwr_t0) < 2U) {
+    }
 
     // Init speed <= 400 kHz: BR = /64 (or /256 @ 72 MHz), MSTR | SSM | SSI | SPE
     const uint32_t br = (pclk2_hz_ > 16000000U) ? (0x7U << 3U) : (0x5U << 3U);
@@ -363,9 +437,25 @@ bool Stm32F103PlatformHw::sd_init_card() noexcept {
         return false;
     }
 
-    // Raise SPI1 clock to fast data rate (fPCLK2 / 4)
+    // CMD58 -> verify OCR CCS bit 30 (bit 6 of OCR[31:24]) confirms SDHC card (OPEN-16)
+    sd_cs_low();
+    const uint8_t r58 = sd_send_cmd(58U, 0U, 0xFDU);
+    const uint8_t ocr0 = spi1_xfer(0xFFU);
+    for (uint8_t i = 0U; i < 3U; ++i) {
+        (void)spi1_xfer(0xFFU);
+    }
+    sd_cs_high();
+    if (r58 != 0x00U) {
+        return false;
+    }
+    sd_is_sdhc_ = ((ocr0 & 0x40U) != 0U);
+    if (!sd_is_sdhc_) {
+        return false;
+    }
+
+    // Raise SPI1 clock to fast data rate (fPCLK2 / 4) only after SPI1 BSY clears
+    wait_spi1_not_busy();
     spi1()->CR1 = (spi1()->CR1 & ~(0x7U << 3U)) | (0x1U << 3U);
-    sd_is_sdhc_ = true;
     return true;
 }
 
@@ -409,6 +499,7 @@ bool Stm32F103PlatformHw::sd_write_sector(uint32_t lba,
 
     sd_cs_high();
     (void)spi1_xfer(0xFFU);
+    wait_spi1_not_busy();
     duration_ms_out = uptime_ms() - t0;
     return true;
 }

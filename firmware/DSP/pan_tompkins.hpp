@@ -36,7 +36,6 @@ struct DspSampleOutput {
 
 struct DspBatchOutput {
     uint16_t sample_count = 0U;
-    std::array<int16_t, kSdMaxRawSamples> filtered_samples{};
     uint8_t r_peak_count = 0U;
     std::array<DetectedRPeak, kMaxPeaksPerBatch> peaks{};
 };

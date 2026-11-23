@@ -90,6 +90,12 @@ public:
     const DspConfig& dsp_config() const noexcept { return dsp_.config(); }
     bool in_gap_blanking() const noexcept { return dsp_.in_gap_blanking(); }
 
+    // Shared DSP/HRV accessors for mutually exclusive Wearable mode (saves ~2.7 KB SRAM).
+    EcgDspCore& shared_dsp() noexcept { return dsp_; }
+    const EcgDspCore& shared_dsp() const noexcept { return dsp_; }
+    HrvAnalyzer& shared_hrv() noexcept { return hrv_; }
+    const HrvAnalyzer& shared_hrv() const noexcept { return hrv_; }
+
 private:
     static EncodedHilFrame encode_error_nack(uint16_t rejected_seq,
                                              FailureStatus status) noexcept;

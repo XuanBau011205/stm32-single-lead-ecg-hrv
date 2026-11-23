@@ -105,6 +105,10 @@ public:
     // Executes the exact OPEN-9b / R-PWR-01 Stop Mode sequence (32.1 uA target).
     void enter_stop_mode() noexcept;
 
+    // Clears a latched HIL lockout only when hardware reports verified safe detached state
+    // (both PA1 and PA2 HIGH and debounced >= 50 ms).
+    bool try_clear_hil_lockout() noexcept;
+
     AppMode mode() const noexcept { return mode_; }
     bool ina219_powerdown_fault() const noexcept { return ina219_pd_fault_; }
     uint32_t sd_sectors_written() const noexcept { return sd_next_lba_; }
@@ -122,8 +126,7 @@ private:
     IPlatformHw& hw_;
     PingPongDmaBuffer ping_pong_{};
     SensorBoundaryMonitor sensor_mon_{};
-    EcgDspCore wearable_dsp_{};
-    HrvAnalyzer wearable_hrv_{};
+    // Wearable and HIL modes are mutually exclusive (OPEN-2); share hil_'s DSP/HRV state.
     HilSession hil_;
 
     AppMode mode_ = AppMode::BootInit;
@@ -134,6 +137,7 @@ private:
     bool protection_known_ = true;
     bool user_stop_requested_ = false;
     bool ina219_pd_fault_ = false;
+    bool pending_overflow_gap_flag_ = false;
 
     uint32_t wearable_sample_idx_ = 0U;
     uint32_t sd_block_seq_ = 0U;

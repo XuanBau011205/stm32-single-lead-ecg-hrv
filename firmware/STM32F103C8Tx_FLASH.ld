@@ -1,14 +1,14 @@
 /*
  * Linker script for STM32F103C8T6 (P05 ECG Project)
  * Target: ARM Cortex-M3 (no FPU), 64KB Flash, 20KB SRAM
- * Zero-Heap Architecture (Heap size = 0, Stack = 2KB)
+ * Zero-Heap Architecture (Heap size = 0, Stack = 4KB)
  */
 
 ENTRY(Reset_Handler)
 
 _estack = ORIGIN(RAM) + LENGTH(RAM); /* End of RAM */
 _Min_Leftover_RAM = 0x400;           /* 1KB minimum reserve */
-_Min_Stack_Size   = 0x800;           /* 2KB Stack size */
+_Min_Stack_Size   = 0x1000;          /* 4KB Stack size */
 _Min_Heap_Size    = 0;               /* ZERO HEAP: No dynamic allocation */
 
 MEMORY
@@ -39,7 +39,28 @@ SECTIONS
     KEEP (*(.init))
     KEEP (*(.fini))
     . = ALIGN(4);
+    PROVIDE_HIDDEN (__preinit_array_start = .);
+    KEEP (*(.preinit_array*))
+    PROVIDE_HIDDEN (__preinit_array_end = .);
+    . = ALIGN(4);
+    PROVIDE_HIDDEN (__init_array_start = .);
+    KEEP (*(SORT(.init_array.*)))
+    KEEP (*(.init_array*))
+    PROVIDE_HIDDEN (__init_array_end = .);
+    . = ALIGN(4);
     _etext = .;
+  } >FLASH
+
+  .ARM.extab :
+  {
+    *(.ARM.extab* .gnu.linkonce.armextab.*)
+  } >FLASH
+
+  .ARM :
+  {
+    __exidx_start = .;
+    *(.ARM.exidx*)
+    __exidx_end = .;
   } >FLASH
 
   _sidata = LOADADDR(.data);
@@ -77,10 +98,5 @@ SECTIONS
     . = ALIGN(8);
   } >RAM
 
-  /DISCARD/ :
-  {
-    libc.a ( * )
-    libm.a ( * )
-    libgcc.a ( * )
-  }
+  .ARM.attributes 0 : { *(.ARM.attributes) }
 }

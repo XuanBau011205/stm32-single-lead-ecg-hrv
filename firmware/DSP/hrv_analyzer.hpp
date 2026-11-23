@@ -73,6 +73,7 @@ private:
     std::array<RrEntry, kWindowSize> ring_{};
     std::size_t head_ = 0U;   // next write slot
     std::size_t count_ = 0U;  // valid entries in ring_ (0..64)
+    std::size_t beats_since_interruption_ = 0U;  // resets after interruption so 5-beat median re-seeds
     bool prev_beat_contiguous_ = false;
     bool fault_active_ = false;
     FailureStatus last_fault_{CanonicalState::Valid, DetailCode::Ok};

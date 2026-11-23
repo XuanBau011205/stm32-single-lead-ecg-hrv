@@ -259,6 +259,27 @@ void test_06_ablation1_integer_vs_soft_float_equivalence() {
     EXPECT_EQ(ri.value().pnn50_permille, rf.value().pnn50_permille);
 }
 
+void test_07_post_interruption_hr_shift_recovery() {
+    p05::HrvAnalyzer hrv;
+    hrv.configure(p05::MathMode::Q15);
+
+    // 6 baseline beats at 1000 ms (60 BPM)
+    for (int i = 0; i < 6; ++i) {
+        EXPECT_EQ(hrv.push_rr_us(1000000U), p05::HrvAnalyzer::RrDecision::Accepted);
+    }
+
+    // Interruption (e.g., Leads-Off while resting, re-attached at 100 BPM = 600 ms, -40% shift)
+    hrv.on_interruption(
+        p05::FailureStatus{p05::CanonicalState::SensorUnavailable, p05::DetailCode::LeadsOff});
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_EQ(hrv.push_rr_us(600000U), p05::HrvAnalyzer::RrDecision::Accepted);
+    }
+    // 6th beat at 600 ms accepted against newly re-seeded 5-beat median, while 1100 ms outlier rejected
+    EXPECT_EQ(hrv.push_rr_us(600000U), p05::HrvAnalyzer::RrDecision::Accepted);
+    EXPECT_EQ(hrv.push_rr_us(1100000U), p05::HrvAnalyzer::RrDecision::RejectedOutlier);
+    EXPECT_TRUE(hrv.compute_metrics().is_ok());
+}
+
 }  // namespace
 
 int main() {
@@ -268,6 +289,7 @@ int main() {
     test_04_gap_interruption_and_detected_r_peak_adapter();
     test_05_64_beat_window_eviction_and_boundary_overflow_safety();
     test_06_ablation1_integer_vs_soft_float_equivalence();
+    test_07_post_interruption_hr_shift_recovery();
 
     std::printf("P05 Task Card 3 HRV Analyzer Host Unit Tests: %d assertions, %d failed\n",
                 g_tests_run, g_tests_failed);

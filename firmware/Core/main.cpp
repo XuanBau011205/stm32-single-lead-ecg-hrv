@@ -19,6 +19,7 @@ std::array<uint8_t, kUartRxRingSize> g_uart_rx_ring{};
 std::atomic<std::size_t> g_uart_rx_head{0U};
 std::atomic<std::size_t> g_uart_rx_tail{0U};
 std::atomic<uint8_t> g_wake_exti_flag{0U};
+std::atomic<uint8_t> g_uart_fault_flag{0U};
 
 bool pop_uart_rx_byte(uint8_t& out) noexcept {
     const std::size_t tail = g_uart_rx_tail.load(std::memory_order_relaxed);
@@ -102,13 +103,18 @@ void DMA1_Channel1_IRQHandler() {
 }
 
 void USART1_IRQHandler() {
-    if ((p05::stm32::usart1()->SR & (1U << 5U)) != 0U) {  // RXNE
+    const uint32_t sr = p05::stm32::usart1()->SR;
+    if ((sr & ((1U << 5U) | 0x0FU)) != 0U) {  // RXNE | ORE | NE | FE | PE
         const uint8_t b = static_cast<uint8_t>(p05::stm32::usart1()->DR & 0xFFU);
-        const std::size_t head = g_uart_rx_head.load(std::memory_order_relaxed);
-        const std::size_t next = (head + 1U) & kUartRxRingMask;
-        if (next != g_uart_rx_tail.load(std::memory_order_acquire)) {
-            g_uart_rx_ring[head] = b;
-            g_uart_rx_head.store(next, std::memory_order_release);
+        if ((sr & 0x0EU) != 0U) {  // ORE | NE | FE hardware error clears SR/DR and records fault
+            g_uart_fault_flag.store(1U, std::memory_order_release);
+        } else if ((sr & (1U << 5U)) != 0U) {
+            const std::size_t head = g_uart_rx_head.load(std::memory_order_relaxed);
+            const std::size_t next = (head + 1U) & kUartRxRingMask;
+            if (next != g_uart_rx_tail.load(std::memory_order_acquire)) {
+                g_uart_rx_ring[head] = b;
+                g_uart_rx_head.store(next, std::memory_order_release);
+            }
         }
     }
 }
@@ -122,22 +128,57 @@ void EXTI15_10_IRQHandler() {
 
 }  // extern "C"
 
-int main() {
-    // Static Zero-Heap firmware instances initialized deterministically in main() before IRQs
+extern "C" void p05_firmware_main() {
+    // Static Zero-Heap firmware instances initialized deterministically before IRQs
     static p05::stm32::Stm32F103PlatformHw hw;
     static p05::P05AppController app(hw);
     g_app_ptr = &app;
 
     UartFrameAssembler framer;
+    bool has_wake_ms = false;
+    uint32_t last_wake_ms = 0U;
+    bool has_exti_ms = false;
+    uint32_t last_exti_ms = 0U;
+
     app.boot(p05::PowerClockProfile::Run8MHzQ15Sleep);
+    if (app.mode() != p05::AppMode::StopMode) {
+        last_wake_ms = hw.uptime_ms();
+        has_wake_ms = true;
+    }
 
     while (true) {
+        if (g_uart_fault_flag.exchange(0U, std::memory_order_acq_rel) != 0U) {
+            app.on_uart1_comms_fault();
+        }
+
         if (g_wake_exti_flag.exchange(0U, std::memory_order_acq_rel) != 0U) {
             if (app.mode() == p05::AppMode::StopMode) {
+                // SysTick was paused in Stop Mode, so always process EXTI12 wake immediately.
                 app.boot(p05::PowerClockProfile::Run8MHzQ15Sleep);
+                g_wake_exti_flag.store(0U, std::memory_order_release);
+                if (app.mode() != p05::AppMode::StopMode) {
+                    last_wake_ms = hw.uptime_ms();
+                    has_wake_ms = true;
+                    last_exti_ms = last_wake_ms;
+                    has_exti_ms = true;
+                }
             } else {
-                app.request_user_stop();
+                // 50 ms button debounce + 200 ms post-wake bounce guard before user Stop request.
+                const uint32_t now_ms = hw.uptime_ms();
+                const bool post_wake_ok = !has_wake_ms || ((now_ms - last_wake_ms) >= 200U);
+                const bool debounced = !has_exti_ms || ((now_ms - last_exti_ms) >= 50U);
+                if (post_wake_ok && debounced) {
+                    last_exti_ms = now_ms;
+                    has_exti_ms = true;
+                    app.request_user_stop();
+                }
             }
+        }
+
+        if (app.mode() == p05::AppMode::StopMode) {
+            // Re-enter Stop Mode immediately if woken by a non-EXTI event or still in StopMode.
+            hw.enter_stop_mode_wfi();
+            continue;
         }
 
         uint8_t rx_byte = 0U;
@@ -150,4 +191,9 @@ int main() {
 
         app.step();
     }
+}
+
+int main() {
+    p05_firmware_main();
+    return 0;
 }

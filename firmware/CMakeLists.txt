@@ -21,7 +21,7 @@ add_definitions(
 )
 
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32F103C8Tx_FLASH.ld")
-set(LINKER_FLAGS "${MCU_FLAGS} -T${LINKER_SCRIPT} -specs=nano.specs -specs=nosys.specs -Wl,--gc-sections -Wl,-Map=${PROJECT_NAME}.map,--cref")
+set(LINKER_FLAGS "${MCU_FLAGS} -T\"${LINKER_SCRIPT}\" -specs=nano.specs -specs=nosys.specs -Wl,--gc-sections -Wl,-Map=${PROJECT_NAME}.map,--cref")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LINKER_FLAGS}")
 
 include_directories(

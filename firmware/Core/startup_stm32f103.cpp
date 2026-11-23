@@ -9,7 +9,13 @@ extern uint32_t _edata;
 extern uint32_t _sbss;
 extern uint32_t _ebss;
 
-int main();
+using InitFn = void (*)();
+extern InitFn __preinit_array_start[];
+extern InitFn __preinit_array_end[];
+extern InitFn __init_array_start[];
+extern InitFn __init_array_end[];
+
+void p05_firmware_main();
 
 void Default_Handler() {
     while (true) {
@@ -66,17 +72,30 @@ const IsrFn g_pfnVectors[16 + 43] = {
     Default_Handler, Default_Handler,                                    // 41..42
 };
 
+inline void run_init_array(InitFn* start, InitFn* end) {
+    const uintptr_t stop = reinterpret_cast<uintptr_t>(end);
+    for (uint32_t i = 0U; reinterpret_cast<uintptr_t>(&start[i]) < stop; ++i) {
+        if (start[i] != nullptr) {
+            start[i]();
+        }
+    }
+}
+
 void Reset_Handler() {
     uint32_t* src = &_sidata;
     uint32_t* dst = &_sdata;
-    while (dst < &_edata) {
+    const uintptr_t edata_addr = reinterpret_cast<uintptr_t>(&_edata);
+    while (reinterpret_cast<uintptr_t>(dst) < edata_addr) {
         *dst++ = *src++;
     }
     dst = &_sbss;
-    while (dst < &_ebss) {
+    const uintptr_t ebss_addr = reinterpret_cast<uintptr_t>(&_ebss);
+    while (reinterpret_cast<uintptr_t>(dst) < ebss_addr) {
         *dst++ = 0U;
     }
-    (void)main();
+    run_init_array(__preinit_array_start, __preinit_array_end);
+    run_init_array(__init_array_start, __init_array_end);
+    p05_firmware_main();
     while (true) {
     }
 }

@@ -214,6 +214,7 @@ inline void gpio_set_mode(GpioRegs* port, uint8_t pin, uint32_t cnf_mode_4bit) n
 // Common 4-bit CNF|MODE encodings (RM0008 Table 20)
 inline constexpr uint32_t kGpioAnalog = 0x0U;       // Analog input (0 uA Stop Mode)
 inline constexpr uint32_t kGpioInputFloat = 0x4U;   // Input floating (PB12 external 100k pull-up)
+inline constexpr uint32_t kGpioInputPull = 0x8U;    // Input with pull-up / pull-down
 inline constexpr uint32_t kGpioOutPp2MHz = 0x2U;    // Output push-pull 2 MHz
 inline constexpr uint32_t kGpioOutOd2MHz = 0x6U;    // Output open-drain 2 MHz
 inline constexpr uint32_t kGpioAfPp50MHz = 0xBU;    // Alternate function push-pull 50 MHz

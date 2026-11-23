@@ -14,6 +14,7 @@ inline constexpr uint32_t kI2cCr1Pe = 1U << 0U;
 inline constexpr uint32_t kI2cCr1Start = 1U << 8U;
 inline constexpr uint32_t kI2cCr1Stop = 1U << 9U;
 inline constexpr uint32_t kI2cCr1Ack = 1U << 10U;
+inline constexpr uint32_t kI2cCr1Pos = 1U << 11U;
 inline constexpr uint32_t kI2cCr1Swrst = 1U << 15U;
 
 inline constexpr uint32_t kI2cSr1Sb = 1U << 0U;
@@ -171,44 +172,66 @@ bool Stm32I2c1Ina219::read_reg16(uint8_t reg, uint16_t& val_out, uint32_t timeou
         }
     }
 
-    // Phase 2: Repeated START + Read 2 bytes (MSB, LSB)
-    i2c1()->CR1 |= kI2cCr1Ack | kI2cCr1Start;
+    // Phase 2: Repeated START + Read 2 bytes (MSB, LSB) via RM0008 section 26.3.3 POS=1 sequence
+    i2c1()->CR1 |= kI2cCr1Pos | kI2cCr1Ack | kI2cCr1Start;
     while ((i2c1()->SR1 & kI2cSr1Sb) == 0U) {
         if (timed_out()) {
-            i2c1()->CR1 |= kI2cCr1Stop;
+            i2c1()->CR1 = (i2c1()->CR1 & ~(kI2cCr1Pos | kI2cCr1Ack)) | kI2cCr1Stop;
             return false;
         }
     }
     i2c1()->DR = static_cast<uint32_t>((kIna219Addr7 << 1U) | 1U);
     while ((i2c1()->SR1 & (kI2cSr1Addr | kI2cSr1Af)) == 0U) {
         if (timed_out()) {
-            i2c1()->CR1 |= kI2cCr1Stop;
+            i2c1()->CR1 = (i2c1()->CR1 & ~(kI2cCr1Pos | kI2cCr1Ack)) | kI2cCr1Stop;
             return false;
         }
     }
     if ((i2c1()->SR1 & kI2cSr1Af) != 0U) {
         i2c1()->SR1 &= ~kI2cSr1Af;
-        i2c1()->CR1 |= kI2cCr1Stop;
+        i2c1()->CR1 = (i2c1()->CR1 & ~(kI2cCr1Pos | kI2cCr1Ack)) | kI2cCr1Stop;
         return false;
     }
+
+    // Clear ADDR and immediately clear ACK while masked so NACK applies to byte 2
+#if defined(__arm__) || defined(__thumb__)
+    uint32_t primask = 0U;
+    asm volatile("mrs %0, primask" : "=r"(primask)::"memory");
+    asm volatile("cpsid i" ::: "memory");
+    (void)i2c1()->SR1;
     (void)i2c1()->SR2;
-
-    while ((i2c1()->SR1 & kI2cSr1Rxne) == 0U) {
-        if (timed_out()) {
-            i2c1()->CR1 |= kI2cCr1Stop;
-            return false;
-        }
-    }
-    const uint8_t msb = static_cast<uint8_t>(i2c1()->DR & 0xFFU);
-
     i2c1()->CR1 &= ~kI2cCr1Ack;
-    i2c1()->CR1 |= kI2cCr1Stop;
-    while ((i2c1()->SR1 & kI2cSr1Rxne) == 0U) {
+    if (primask == 0U) {
+        asm volatile("cpsie i" ::: "memory");
+    }
+#else
+    (void)i2c1()->SR1;
+    (void)i2c1()->SR2;
+    i2c1()->CR1 &= ~kI2cCr1Ack;
+#endif
+
+    // Wait for both bytes to finish shifting (BTF = 1), then STOP + read MSB & LSB
+    while ((i2c1()->SR1 & kI2cSr1Btf) == 0U) {
         if (timed_out()) {
+            i2c1()->CR1 = (i2c1()->CR1 & ~(kI2cCr1Pos | kI2cCr1Ack)) | kI2cCr1Stop;
             return false;
         }
     }
+
+#if defined(__arm__) || defined(__thumb__)
+    asm volatile("mrs %0, primask" : "=r"(primask)::"memory");
+    asm volatile("cpsid i" ::: "memory");
+    i2c1()->CR1 |= kI2cCr1Stop;
+    const uint8_t msb = static_cast<uint8_t>(i2c1()->DR & 0xFFU);
+    if (primask == 0U) {
+        asm volatile("cpsie i" ::: "memory");
+    }
+#else
+    i2c1()->CR1 |= kI2cCr1Stop;
+    const uint8_t msb = static_cast<uint8_t>(i2c1()->DR & 0xFFU);
+#endif
     const uint8_t lsb = static_cast<uint8_t>(i2c1()->DR & 0xFFU);
+    i2c1()->CR1 &= ~kI2cCr1Pos;
 
     val_out = static_cast<uint16_t>((static_cast<uint16_t>(msb) << 8U) | lsb);
     return true;
@@ -221,7 +244,10 @@ Ina219RawTransaction Stm32I2c1Ina219::read_telemetry() noexcept {
     uint16_t bus_raw = 0U;
     uint16_t cur_raw = 0U;
     const bool ok1 = read_reg16(kRegBusVoltage, bus_raw, kI2cTimeoutMs);
-    const bool ok2 = ok1 && read_reg16(kRegCurrent, cur_raw, kI2cTimeoutMs);
+    const uint32_t elapsed1 = (uptime_fn_ != nullptr) ? (uptime_fn_() - t0) : 0U;
+    const uint32_t rem_ms = (elapsed1 < kI2cTimeoutMs) ? (kI2cTimeoutMs - elapsed1) : 0U;
+    const bool ok2 = ok1 && ((rem_ms > 0U) || (uptime_fn_ == nullptr)) &&
+                     read_reg16(kRegCurrent, cur_raw, rem_ms);
 
     tx.transaction_ms = (uptime_fn_ != nullptr) ? (uptime_fn_() - t0) : 0U;
     tx.i2c_ok = ok2;

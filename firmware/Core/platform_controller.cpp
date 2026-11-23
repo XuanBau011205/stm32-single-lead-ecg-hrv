@@ -42,10 +42,11 @@ void P05AppController::start_wearable_mode() noexcept {
 
     const MathMode mm =
         (profile_ == PowerClockProfile::Run72MHzSoftFloat) ? MathMode::SoftFloat : MathMode::Q15;
-    (void)wearable_dsp_.configure(DspConfig{kDefaultWearableFsHz, mm, true});  // 250 Hz (OPEN-25)
-    wearable_hrv_.configure(mm);
+    (void)hil_.shared_dsp().configure(DspConfig{kDefaultWearableFsHz, mm, true});  // 250 Hz (OPEN-25)
+    hil_.shared_hrv().configure(mm);
     wearable_sample_idx_ = 0U;
     pending_peak_count_ = 0U;
+    pending_overflow_gap_flag_ = false;
 
     // Power on microSD via AO3401 (PB0 = LOW) and initialize SDHC raw block mode
     hw_.set_sd_power_enable(true);
@@ -72,10 +73,10 @@ uint16_t P05AppController::build_sd_flags(bool overflow_gap) const noexcept {
     if (hw_.read_lod_n_high()) {
         flags |= sd_flags::kLodN;
     }
-    if (wearable_dsp_.config().math_mode == MathMode::SoftFloat) {
+    if (hil_.shared_dsp().config().math_mode == MathMode::SoftFloat) {
         flags |= sd_flags::kSoftFloat;
     }
-    if (wearable_dsp_.config().fs_hz == kFs500Hz) {
+    if (hil_.shared_dsp().config().fs_hz == kFs500Hz) {
         flags |= sd_flags::kFs500Hz;
     }
     if (overflow_gap) {
@@ -115,10 +116,10 @@ void P05AppController::flush_rr_hrv_block(uint32_t now_ms) noexcept {
     SdRrHrvBlockInput in{};
     in.block_seq = sd_block_seq_++;
     in.timestamp_ms = now_ms;
-    in.flags = build_sd_flags(false);
+    in.flags = build_sd_flags(pending_overflow_gap_flag_);
     in.valid_rr_count = pending_peak_count_;
     in.peaks = pending_peaks_;
-    in.hrv_res = wearable_hrv_.compute_metrics();
+    in.hrv_res = hil_.shared_hrv().compute_metrics();
     in.battery_res = last_bat_res_;
     in.ina219_res = last_ina_res_;
 
@@ -175,7 +176,7 @@ void P05AppController::step() noexcept {
         WearableBatchInputs in{};
         in.raw_samples = half.samples;
         in.sample_count = PingPongDmaBuffer::kHalfSamples;
-        in.fs_hz = wearable_dsp_.config().fs_hz;
+        in.fs_hz = hil_.shared_dsp().config().fs_hz;
         in.uptime_ms = half.timestamp_ms;
         in.afe_enabled = afe_enabled_;
         in.lod_p_high = hw_.read_lod_p_high();
@@ -183,30 +184,39 @@ void P05AppController::step() noexcept {
         in.pingpong_overflow = half.overflowed;
 
         const Result<TrustedWearableBatch> batch_res = sensor_mon_.validate_wearable_batch(in);
+        if (half.overflowed ||
+            (batch_res.is_err() && (batch_res.detail_code() == DetailCode::PingPongOverflow ||
+                                    batch_res.detail_code() == DetailCode::SeqGap))) {
+            pending_overflow_gap_flag_ = true;
+        }
 
         if (sensor_mon_.consume_dsp_reset_pending()) {
             // OPEN-6c: reset IIR and Pan-Tompkins when electrodes re-attach
-            wearable_dsp_.reset();
-            wearable_hrv_.on_interruption(
+            hil_.shared_dsp().reset();
+            hil_.shared_hrv().on_interruption(
                 FailureStatus{CanonicalState::SensorUnavailable, DetailCode::LeadsOff});
         }
 
         const Result<DspBatchOutput> dsp_res =
-            wearable_dsp_.process_wearable_batch(batch_res, wearable_sample_idx_);
+            hil_.shared_dsp().process_wearable_batch(batch_res, wearable_sample_idx_);
         wearable_sample_idx_ += static_cast<uint32_t>(PingPongDmaBuffer::kHalfSamples);
 
         if (batch_res.is_ok()) {
-            // Write 512 B RAW_ECG_BLOCK to microSD via SPI1
-            const Result<SdSectorBuffer> raw_blk = format_sd_raw_ecg_block(
-                sd_block_seq_++, half.timestamp_ms, build_sd_flags(false), batch_res.value());
-            if (raw_blk.is_ok()) {
-                (void)write_sd_sector_with_retry(raw_blk.value());
+            // Write 512 B RAW_ECG_BLOCK to microSD via SPI1 in scoped block to reduce peak stack
+            {
+                const Result<SdSectorBuffer> raw_blk = format_sd_raw_ecg_block(
+                    sd_block_seq_++, half.timestamp_ms, build_sd_flags(pending_overflow_gap_flag_),
+                    batch_res.value());
+                if (raw_blk.is_ok()) {
+                    pending_overflow_gap_flag_ = false;
+                    (void)write_sd_sector_with_retry(raw_blk.value());
+                }
             }
 
             if (dsp_res.is_ok()) {
                 for (uint8_t p = 0U; p < dsp_res.value().r_peak_count; ++p) {
                     const DetectedRPeak& pk = dsp_res.value().peaks[p];
-                    (void)wearable_hrv_.push_r_peak(pk);
+                    (void)hil_.shared_hrv().push_r_peak(pk);
 
                     if (pending_peak_count_ < kSdMaxRrRecords) {
                         TrustedRPeakRecord rec{};
@@ -221,7 +231,7 @@ void P05AppController::step() noexcept {
                 }
             }
         } else {
-            wearable_hrv_.on_interruption(batch_res.status());
+            hil_.shared_hrv().on_interruption(batch_res.status());
         }
     }
 
@@ -261,6 +271,15 @@ void P05AppController::on_uart1_frame(ConstByteView raw_frame) noexcept {
 
 void P05AppController::on_uart1_comms_fault() noexcept {
     (void)hil_.on_uart_fault();
+}
+
+bool P05AppController::try_clear_hil_lockout() noexcept {
+    const bool lod_p = hw_.read_lod_p_high();
+    const bool lod_n = hw_.read_lod_n_high();
+    (void)sensor_mon_.update_leads_off(lod_p, lod_n, hw_.uptime_ms());
+    const bool debounced_detached = lod_p && lod_n && sensor_mon_.leads_off_debounced();
+    const HilSafetyInputs safety{protection_known_, debounced_detached};
+    return hil_.try_clear_lockout(safety);
 }
 
 void P05AppController::enter_stop_mode() noexcept {

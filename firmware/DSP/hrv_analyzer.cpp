@@ -91,6 +91,7 @@ void HrvAnalyzer::reset() noexcept {
     ring_.fill(RrEntry{});
     head_ = 0U;
     count_ = 0U;
+    beats_since_interruption_ = 0U;
     prev_beat_contiguous_ = false;
     fault_active_ = false;
     last_fault_ = FailureStatus{CanonicalState::Valid, DetailCode::Ok};
@@ -100,6 +101,9 @@ void HrvAnalyzer::reset() noexcept {
 void HrvAnalyzer::on_interruption(FailureStatus fault) noexcept {
     // R-HRV-01: break beat continuity across Leads-Off, Stale, SeqGap, or CommsFault
     prev_beat_contiguous_ = false;
+    // Allow first 5 post-interruption beats in [300 ms, 2000 ms] to re-seed the 5-beat median
+    // baseline so a large true HR shift during the gap never deadlocks the 20% filter.
+    beats_since_interruption_ = 0U;
     if (fault.canonical != CanonicalState::Valid) {
         fault_active_ = true;
         last_fault_ = fault;
@@ -134,7 +138,7 @@ HrvAnalyzer::RrDecision HrvAnalyzer::push_rr_us(uint32_t rr_us) noexcept {
     }
 
     // 2. Statistical 20% deviation check against median of last 5 valid beats (OPEN-10d)
-    if (count_ >= kMedianLookback) {
+    if (count_ >= kMedianLookback && beats_since_interruption_ >= kMedianLookback) {
         const uint32_t med5 = median_last_5();
         const uint64_t diff = static_cast<uint64_t>(abs_diff_u32(rr_us, med5));
         // |rr - med5| > 0.20 * med5  <=>  5 * |rr - med5| > med5 (exact integer test)
@@ -150,6 +154,9 @@ HrvAnalyzer::RrDecision HrvAnalyzer::push_rr_us(uint32_t rr_us) noexcept {
     head_ = (head_ + 1U) % kWindowSize;
     if (count_ < kWindowSize) {
         ++count_;
+    }
+    if (beats_since_interruption_ < kWindowSize) {
+        ++beats_since_interruption_;
     }
     prev_beat_contiguous_ = true;
     fault_active_ = false;

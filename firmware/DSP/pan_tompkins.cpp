@@ -560,7 +560,6 @@ Result<DspBatchOutput> EcgDspCore::process_hil_batch(
     for (std::size_t i = 0U; i < static_cast<std::size_t>(batch.sample_count); ++i) {
         const uint32_t idx = batch.first_sample_idx + static_cast<uint32_t>(i);
         const DspSampleOutput s_out = process_trusted_adc_sample(batch.samples[i], idx);
-        out.filtered_samples[i] = s_out.filtered_q15;
         if (s_out.r_peak_detected && out.r_peak_count < kMaxPeaksPerBatch) {
             out.peaks[out.r_peak_count] = s_out.r_peak;
             ++out.r_peak_count;
@@ -592,7 +591,6 @@ Result<DspBatchOutput> EcgDspCore::process_wearable_batch(
     for (std::size_t i = 0U; i < static_cast<std::size_t>(batch.sample_count); ++i) {
         const uint32_t idx = first_sample_idx + static_cast<uint32_t>(i);
         const DspSampleOutput s_out = process_trusted_adc_sample(batch.samples[i], idx);
-        out.filtered_samples[i] = s_out.filtered_q15;
         if (s_out.r_peak_detected && out.r_peak_count < kMaxPeaksPerBatch) {
             out.peaks[out.r_peak_count] = s_out.r_peak;
             ++out.r_peak_count;

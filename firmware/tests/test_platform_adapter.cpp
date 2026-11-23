@@ -452,6 +452,62 @@ void test_04_failsafe_triggers_low_battery_lod_60s_sd_3x_and_r3_lockout() {
     }
 }
 
+void test_05_overflow_flag_latched_and_debounced_lockout_clear() {
+    MockPlatformHw hw;
+    p05::P05AppController app(hw);
+    app.boot();
+    for (std::size_t i = 0U; i < 490U; ++i) {
+        hw.dma_dst[i] = 2048;
+    }
+
+    // 1. Trigger Ping-Pong DMA overflow (3 notifications before main polls -> half 0 overflowed)
+    hw.now_ms += 980U;
+    app.isr_on_dma_half(0U);
+    hw.now_ms += 980U;
+    app.isr_on_dma_half(1U);
+    hw.now_ms += 980U;
+    app.isr_on_dma_half(0U);
+    app.step();  // consumes overflowed half 0
+
+    // Next valid half emits RAW_ECG_BLOCK with latched kPingPongOverflowGap bit (bit 4)
+    hw.now_ms += 980U;
+    app.step();  // consumes clean half 1
+    EXPECT_EQ(hw.sd_stored, 1U);
+    const auto blk0 = p05::parse_sd_raw_ecg_block(
+        p05::ConstByteView{hw.sd_sectors[0].data(), p05::kSdBlockBytes});
+    EXPECT_TRUE(blk0.is_ok());
+    EXPECT_TRUE((blk0.value().header.flags & p05::sd_flags::kPingPongOverflowGap) != 0U);
+
+    // Subsequent clean half clears the latched bit
+    hw.now_ms += 980U;
+    app.isr_on_dma_half(0U);
+    app.step();
+    EXPECT_EQ(hw.sd_stored, 2U);
+    const auto blk1 = p05::parse_sd_raw_ecg_block(
+        p05::ConstByteView{hw.sd_sectors[1].data(), p05::kSdBlockBytes});
+    EXPECT_TRUE(blk1.is_ok());
+    EXPECT_EQ(blk1.value().header.flags & p05::sd_flags::kPingPongOverflowGap, 0U);
+
+    // 2. Lockout clear requires both PA1 & PA2 HIGH AND >= 50 ms debounce
+    const auto cfg1 = build_hil_config_req(1U);
+    app.on_uart1_frame(p05::ConstByteView{cfg1.data(), cfg1.size()});
+    EXPECT_TRUE(app.hil_lockout_latched());
+
+    hw.lod_p = true;
+    hw.lod_n = true;
+    hw.now_ms += 100U;
+    EXPECT_TRUE(!app.try_clear_hil_lockout());  // 0 ms since detach: not debounced yet
+    EXPECT_TRUE(app.hil_lockout_latched());
+
+    hw.now_ms += 50U;
+    EXPECT_TRUE(app.try_clear_hil_lockout());   // >= 50 ms debounced leads-off clears lockout
+    EXPECT_TRUE(!app.hil_lockout_latched());
+
+    const auto cfg2 = build_hil_config_req(2U);
+    app.on_uart1_frame(p05::ConstByteView{cfg2.data(), cfg2.size()});
+    EXPECT_EQ(app.mode(), p05::AppMode::HilMode);
+}
+
 }  // namespace
 
 int main() {
@@ -459,6 +515,7 @@ int main() {
     test_02_ping_pong_isr_and_overflow_detection();
     test_03_stop_mode_sequence_and_i2c_retry_policy();
     test_04_failsafe_triggers_low_battery_lod_60s_sd_3x_and_r3_lockout();
+    test_05_overflow_flag_latched_and_debounced_lockout_clear();
 
     std::printf("P05 Task Card 5 Platform Adapter Mock Tests: %d assertions, %d failed\n",
                 g_tests_run, g_tests_failed);

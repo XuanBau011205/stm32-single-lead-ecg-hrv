@@ -263,6 +263,38 @@ void test_01_sd_512b_formatter_roundtrip_and_single_bit_flip_rejection() {
     EXPECT_EQ(parsed_rr.value().hrv.hr_bpm_x100, 7199U);
     EXPECT_EQ(parsed_rr.value().peaks[1].rr_interval_us, 834000U);
 
+    // 2b. Failed INA219 & BAT_SENSE must set explicit fault flags (MEDIUM-02 / R2)
+    p05::SdRrHrvBlockInput rr_fault{};
+    rr_fault.block_seq = 44U;
+    rr_fault.timestamp_ms = 61000U;
+    rr_fault.valid_rr_count = 0U;
+    const auto rr_fault_res = p05::format_sd_rr_hrv_block(rr_fault);
+    EXPECT_TRUE(rr_fault_res.is_ok());
+    const auto parsed_fault = p05::parse_sd_rr_hrv_block(
+        p05::ConstByteView{rr_fault_res.value().data(), rr_fault_res.value().size()});
+    EXPECT_TRUE(parsed_fault.is_ok());
+    EXPECT_TRUE(!parsed_fault.value().ina219_valid);
+    EXPECT_TRUE(!parsed_fault.value().battery_valid);
+    EXPECT_TRUE((parsed_fault.value().header.flags & p05::sd_flags::kIna219Fault) != 0U);
+    EXPECT_TRUE((parsed_fault.value().header.flags & p05::sd_flags::kBatSenseFault) != 0U);
+
+    // 2c. LOW-06: Reject nonzero reserved trailer [508..509] and unknown upper flag bits
+    p05::SdSectorBuffer bad_trailer = raw_res.value();
+    bad_trailer[508] = 0x01U;
+    p05::write_u16_le(&bad_trailer[510], p05::crc16_ccitt_false(bad_trailer.data(), 510U));
+    EXPECT_EQ(p05::parse_sd_raw_ecg_block(
+                  p05::ConstByteView{bad_trailer.data(), bad_trailer.size()})
+                  .detail_code(),
+              p05::DetailCode::SemanticRange);
+
+    p05::SdSectorBuffer bad_flags = raw_res.value();
+    p05::write_u16_le(&bad_flags[6], 0x0100U);
+    p05::write_u16_le(&bad_flags[510], p05::crc16_ccitt_false(bad_flags.data(), 510U));
+    EXPECT_EQ(p05::parse_sd_raw_ecg_block(
+                  p05::ConstByteView{bad_flags.data(), bad_flags.size()})
+                  .detail_code(),
+              p05::DetailCode::SemanticRange);
+
     // Flip 1 bit in RR_HRV_BLOCK -> rejected
     p05::SdSectorBuffer rr_bad = rr_res.value();
     rr_bad[45] ^= 0x10U;
@@ -307,6 +339,24 @@ void test_02_ping_pong_isr_and_overflow_detection() {
     const auto h_ovf = pp.main_poll_ready();
     EXPECT_TRUE(h_ovf.ready);
     EXPECT_TRUE(h_ovf.overflowed);
+
+    // Race-safe main_consume_ready copies 245 samples and detects mid-copy overwrite (MEDIUM-04)
+    pp.reset();
+    for (std::size_t i = 0U; i < 245U; ++i) {
+        dst[i] = 1900;
+    }
+    pp.isr_notify_half_complete(0U, 5000U);
+    std::array<int16_t, p05::PingPongDmaBuffer::kHalfSamples> copy_buf{};
+    p05::PingPongDmaBuffer::ReadyHalf meta{};
+    EXPECT_TRUE(pp.main_consume_ready(copy_buf, meta));
+    EXPECT_TRUE(!meta.overflowed);
+    EXPECT_EQ(copy_buf[0], 1900);
+
+    // Overwrite half 0 twice before consume -> overflowed == true
+    pp.isr_notify_half_complete(0U, 6000U);
+    pp.isr_notify_half_complete(0U, 7000U);
+    EXPECT_TRUE(pp.main_consume_ready(copy_buf, meta));
+    EXPECT_TRUE(meta.overflowed);
 }
 
 void test_03_stop_mode_sequence_and_i2c_retry_policy() {
@@ -435,20 +485,62 @@ void test_04_failsafe_triggers_low_battery_lod_60s_sd_3x_and_r3_lockout() {
         EXPECT_TRUE(app.hil_lockout_latched());
     }
 
-    // 5. Safe HIL entry when both PA1 & PA2 report detached -> isolates SD & AFE, enters HilMode
+    // 4b. CRITICAL-02: Conflicting UART1 frame & UART1 comms fault during WearableRun MUST NOT wipe
+    //     Wearable DSP/HRV state!
+    {
+        p05::HilSession hil_only;
+        const auto cfg = build_hil_config_req(1U);
+        // Feed 2 beats into shared HRV, then simulate conflicting frame + comms fault while HIL inactive
+        p05::DetectedRPeak pk1{};
+        pk1.has_rr = true;
+        pk1.rr_interval_us = 800000U;
+        EXPECT_EQ(hil_only.shared_hrv().push_r_peak(pk1), p05::HrvAnalyzer::RrDecision::Accepted);
+        EXPECT_EQ(hil_only.shared_hrv().push_r_peak(pk1), p05::HrvAnalyzer::RrDecision::Accepted);
+        EXPECT_TRUE(hil_only.shared_hrv().compute_metrics().is_ok());
+
+        const p05::HilSafetyInputs attached{true, false};
+        (void)hil_only.handle_frame(p05::ConstByteView{cfg.data(), cfg.size()}, 500U, attached);
+        EXPECT_TRUE(hil_only.shared_hrv().compute_metrics().is_ok());
+
+        (void)hil_only.on_uart_fault();
+        EXPECT_TRUE(hil_only.shared_hrv().compute_metrics().is_ok());
+    }
+
+    // 5. Safe HIL entry requires >= 50 ms debounced detach; keeps AD8232 AFE powered (CRITICAL-01)
     {
         MockPlatformHw hw;
         hw.lod_p = true;
         hw.lod_n = true;
         p05::P05AppController app(hw);
         app.boot();
-        const auto cfg = build_hil_config_req(1U);
+        // < 50 ms detach cannot enter HIL
+        hw.now_ms += 30U;
+        const auto cfg_early = build_hil_config_req(1U);
+        app.on_uart1_frame(p05::ConstByteView{cfg_early.data(), cfg_early.size()});
+        EXPECT_EQ(app.mode(), p05::AppMode::WearableRun);
+        EXPECT_TRUE(app.hil_lockout_latched());
+
+        // >= 50 ms debounced detach auto-clears lockout in step() (MEDIUM-03) and allows HIL entry
+        hw.now_ms += 25U;
+        app.step();
+        EXPECT_TRUE(!app.hil_lockout_latched());
+
+        const auto cfg = build_hil_config_req(2U);
         app.on_uart1_frame(p05::ConstByteView{cfg.data(), cfg.size()});
         EXPECT_EQ(app.mode(), p05::AppMode::HilMode);
-        EXPECT_TRUE(!hw.afe_on);
+        EXPECT_TRUE(hw.afe_on);   // AD8232 stays ON so PA1/PA2 remain valid during HIL_SAMPLES_IN
         EXPECT_TRUE(!hw.sd_pwr_on);
         EXPECT_TRUE(!hw.adc_dma_running);
         EXPECT_EQ(hw.last_uart_tx[3], static_cast<uint8_t>(p05::HilMsgType::ResultAck));
+
+        // Re-attaching an electrode mid-HIL immediately rejects and latches lockout
+        hw.lod_p = false;
+        hw.now_ms += 60U;
+        const auto cfg_reattach = build_hil_config_req(3U);
+        app.on_uart1_frame(p05::ConstByteView{cfg_reattach.data(), cfg_reattach.size()});
+        EXPECT_TRUE(app.hil_lockout_latched());
+        EXPECT_EQ(hw.last_uart_tx[10],
+                  static_cast<uint8_t>(p05::CanonicalState::ProtectionStatusUnknown));
     }
 }
 
@@ -506,6 +598,59 @@ void test_05_overflow_flag_latched_and_debounced_lockout_clear() {
     const auto cfg2 = build_hil_config_req(2U);
     app.on_uart1_frame(p05::ConstByteView{cfg2.data(), cfg2.size()});
     EXPECT_EQ(app.mode(), p05::AppMode::HilMode);
+
+    // 3. StaleTimeout and failed SD write set kPingPongOverflowGap; 3 consecutive lost blocks -> Stop (MEDIUM-05)
+    {
+        MockPlatformHw hw2;
+        p05::P05AppController app2(hw2);
+        app2.boot();
+        for (std::size_t i = 0U; i < 490U; ++i) {
+            hw2.dma_dst[i] = 2048;
+        }
+        // Block 1: normal
+        hw2.now_ms += 980U;
+        app2.isr_on_dma_half(0U);
+        app2.step();
+        EXPECT_EQ(hw2.sd_stored, 1U);
+
+        // Block 2: StaleTimeout (> 1960 ms) sets pending Gap flag
+        hw2.now_ms += 2100U;
+        app2.isr_on_dma_half(1U);
+        app2.step();
+        EXPECT_EQ(hw2.sd_stored, 1U);
+
+        // Next valid block carries kPingPongOverflowGap bit (bit 4)
+        hw2.now_ms += 980U;
+        app2.isr_on_dma_half(0U);
+        app2.step();
+        EXPECT_EQ(hw2.sd_stored, 2U);
+        const auto blk_stale_gap = p05::parse_sd_raw_ecg_block(
+            p05::ConstByteView{hw2.sd_sectors[1].data(), p05::kSdBlockBytes});
+        EXPECT_TRUE(blk_stale_gap.is_ok());
+        EXPECT_TRUE((blk_stale_gap.value().header.flags & p05::sd_flags::kPingPongOverflowGap) != 0U);
+
+        // Interleaved overflow (1) + failed SD write (2) + overflow (3) -> StopMode
+        hw2.now_ms += 300U;
+        app2.isr_on_dma_half(1U);
+        hw2.now_ms += 300U;
+        app2.isr_on_dma_half(1U);  // overflow #1
+        app2.step();
+        EXPECT_EQ(app2.mode(), p05::AppMode::WearableRun);
+
+        hw2.sd_write_ok = false;
+        hw2.now_ms += 300U;
+        app2.isr_on_dma_half(0U);  // failed SD write #2
+        app2.step();
+        EXPECT_EQ(app2.mode(), p05::AppMode::WearableRun);
+
+        hw2.sd_write_ok = true;
+        hw2.now_ms += 300U;
+        app2.isr_on_dma_half(1U);
+        hw2.now_ms += 300U;
+        app2.isr_on_dma_half(1U);  // overflow #3 -> StopMode!
+        app2.step();
+        EXPECT_EQ(app2.mode(), p05::AppMode::StopMode);
+    }
 }
 
 }  // namespace

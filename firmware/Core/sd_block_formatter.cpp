@@ -34,15 +34,15 @@ void write_sd_trailer(SdSectorBuffer& buf) noexcept {
 
 }  // namespace
 
-Result<SdSectorBuffer> format_sd_raw_ecg_block(uint32_t block_seq,
-                                               uint32_t timestamp_ms,
-                                               uint16_t flags,
-                                               const TrustedWearableBatch& batch) noexcept {
+FailureStatus format_sd_raw_ecg_block_into(uint32_t block_seq,
+                                           uint32_t timestamp_ms,
+                                           uint16_t flags,
+                                           const TrustedWearableBatch& batch,
+                                           SdSectorBuffer& buf) noexcept {
     if (batch.sample_count == 0U || batch.sample_count > kSdMaxRawSamples) {
-        return Result<SdSectorBuffer>::fail(CanonicalState::Malformed, DetailCode::SemanticRange);
+        return FailureStatus{CanonicalState::Malformed, DetailCode::SemanticRange};
     }
 
-    SdSectorBuffer buf{};
     buf.fill(0U);
     write_sd_header(buf, SdBlockType::RawEcg, flags, block_seq, timestamp_ms);
     write_u16_le(&buf[16], batch.sample_count);
@@ -50,24 +50,44 @@ Result<SdSectorBuffer> format_sd_raw_ecg_block(uint32_t block_seq,
     for (std::size_t i = 0U; i < static_cast<std::size_t>(batch.sample_count); ++i) {
         const int16_t s = batch.samples[i];
         if (s < static_cast<int16_t>(kAdcRawMin) || s > static_cast<int16_t>(kAdcRawMax)) {
-            return Result<SdSectorBuffer>::fail(CanonicalState::Malformed,
-                                                DetailCode::SemanticRange);
+            return FailureStatus{CanonicalState::Malformed, DetailCode::SemanticRange};
         }
         write_i16_le(&buf[18U + (2U * i)], s);
     }
 
     write_sd_trailer(buf);
+    return FailureStatus{CanonicalState::Valid, DetailCode::Ok};
+}
+
+Result<SdSectorBuffer> format_sd_raw_ecg_block(uint32_t block_seq,
+                                               uint32_t timestamp_ms,
+                                               uint16_t flags,
+                                               const TrustedWearableBatch& batch) noexcept {
+    SdSectorBuffer buf{};
+    const FailureStatus st =
+        format_sd_raw_ecg_block_into(block_seq, timestamp_ms, flags, batch, buf);
+    if (st.canonical != CanonicalState::Valid) {
+        return Result<SdSectorBuffer>::fail(st);
+    }
     return Result<SdSectorBuffer>::ok(buf);
 }
 
-Result<SdSectorBuffer> format_sd_rr_hrv_block(const SdRrHrvBlockInput& input) noexcept {
+FailureStatus format_sd_rr_hrv_block_into(const SdRrHrvBlockInput& input,
+                                          SdSectorBuffer& buf) noexcept {
     if (input.valid_rr_count > kSdMaxRrRecords) {
-        return Result<SdSectorBuffer>::fail(CanonicalState::Malformed, DetailCode::SemanticRange);
+        return FailureStatus{CanonicalState::Malformed, DetailCode::SemanticRange};
     }
 
-    SdSectorBuffer buf{};
+    uint16_t eff_flags = input.flags;
+    if (input.ina219_res.is_err()) {
+        eff_flags |= sd_flags::kIna219Fault;
+    }
+    if (input.battery_res.is_err()) {
+        eff_flags |= sd_flags::kBatSenseFault;
+    }
+
     buf.fill(0U);
-    write_sd_header(buf, SdBlockType::RrHrv, input.flags, input.block_seq, input.timestamp_ms);
+    write_sd_header(buf, SdBlockType::RrHrv, eff_flags, input.block_seq, input.timestamp_ms);
 
     buf[16] = input.valid_rr_count;
     buf[17] = input.hrv_res.is_ok() ? 1U : 0U;
@@ -109,6 +129,15 @@ Result<SdSectorBuffer> format_sd_rr_hrv_block(const SdRrHrvBlockInput& input) no
 
     // Bytes 500..507 already zeroed as reserved_padding[8]
     write_sd_trailer(buf);
+    return FailureStatus{CanonicalState::Valid, DetailCode::Ok};
+}
+
+Result<SdSectorBuffer> format_sd_rr_hrv_block(const SdRrHrvBlockInput& input) noexcept {
+    SdSectorBuffer buf{};
+    const FailureStatus st = format_sd_rr_hrv_block_into(input, buf);
+    if (st.canonical != CanonicalState::Valid) {
+        return Result<SdSectorBuffer>::fail(st);
+    }
     return Result<SdSectorBuffer>::ok(buf);
 }
 

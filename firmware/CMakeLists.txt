@@ -15,14 +15,22 @@ set(WARN_FLAGS "-Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MCU_FLAGS} ${OPT_FLAGS} ${WARN_FLAGS}")
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${MCU_FLAGS} -x assembler-with-cpp")
 
+option(P05_BASELINE_72MHZ "Boot in 72 MHz Soft-Float Baseline profile (R-PWR-02)" OFF)
+
 add_definitions(
     -DSTM32F103xB
     -DZERO_HEAP_ARCH
 )
+if(P05_BASELINE_72MHZ)
+    add_definitions(-DP05_BOOT_PROFILE_72MHZ)
+endif()
 
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/STM32F103C8Tx_FLASH.ld")
-set(LINKER_FLAGS "${MCU_FLAGS} -T\"${LINKER_SCRIPT}\" -specs=nano.specs -specs=nosys.specs -Wl,--gc-sections -Wl,-Map=${PROJECT_NAME}.map,--cref")
+set(LINKER_FLAGS "${MCU_FLAGS} -nostartfiles -T\"${LINKER_SCRIPT}\" -specs=nano.specs -specs=nosys.specs -Wl,--gc-sections -Wl,-Map=${PROJECT_NAME}.map,--cref")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LINKER_FLAGS}")
+
+# R-PLT-01 / OPEN-22 static HAL/LL include policy check
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/check_hal_includes.cmake)
 
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/Core

@@ -11,6 +11,18 @@ void spin_cycles(uint32_t iters) noexcept {
     }
 }
 
+bool wait_reg_bits(volatile uint32_t& reg,
+                   uint32_t mask,
+                   uint32_t expected,
+                   uint32_t max_iters) noexcept {
+    for (uint32_t w = 0U; w < max_iters; ++w) {
+        if ((reg & mask) == expected) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void calibrate_adc1() noexcept {
     // RM0008 section 11.4: wake ADC1, wait t_STAB, reset calibration, then run calibration
     adc1()->CR2 |= (1U << 0U);  // ADON = 1
@@ -56,9 +68,10 @@ void Stm32F103PlatformHw::enable_dwt_cyccnt() noexcept {
 
 void Stm32F103PlatformHw::configure_uart1_baud(uint32_t pclk2_hz) noexcept {
     // OPEN-11: 115200 bps, 8-N-1 (0% error @ 72 MHz, +0.64% @ 8 MHz)
-    rcc()->APB2ENR |= (1U << 2U) | (1U << 14U);  // IOPAEN | USART1EN
-    gpio_set_mode(gpioa(), 9U, kGpioAfPp50MHz);   // PA9 TX
-    gpio_set_mode(gpioa(), 10U, kGpioInputFloat); // PA10 RX
+    rcc()->APB2ENR |= (1U << 2U) | (1U << 14U);   // IOPAEN | USART1EN
+    gpio_set_mode(gpioa(), 9U, kGpioAfPp50MHz);    // PA9 TX
+    gpio_set_mode(gpioa(), 10U, kGpioInputPull);   // PA10 RX with internal pull-up (prevents floating EMI)
+    gpioa()->BSRR = (1U << 10U);                   // Pull-up HIGH when cable disconnected
     usart1()->BRR = (pclk2_hz + 57600U) / 115200U;
     usart1()->CR1 = (1U << 13U) | (1U << 5U) | (1U << 3U) | (1U << 2U);  // UE | RXNEIE | TE | RE
     *nvic_iser1() = (1U << 5U);  // IRQ37 = USART1
@@ -104,33 +117,41 @@ void Stm32F103PlatformHw::init_base_peripherals() noexcept {
 void Stm32F103PlatformHw::set_clock_profile(PowerClockProfile profile) noexcept {
     init_base_peripherals();
 
-    // Enable 8 MHz HSE and wait for HSERDY
+    // Enable 8 MHz HSE and wait for HSERDY (bounded)
     rcc()->CR |= (1U << 16U);
-    while ((rcc()->CR & (1U << 17U)) == 0U) {
+    if (!wait_reg_bits(rcc()->CR, (1U << 17U), (1U << 17U), 500000U)) {
+        return;
     }
 
     if (profile == PowerClockProfile::Run72MHzSoftFloat) {
-        // 2 Flash wait states, PPRE1 = /2 (36 MHz), ADCPRE = /6 (12 MHz <= 14 MHz limit),
+        // Switch away from PLL before reconfiguring PLL, then set 2 Flash WS before raising SYSCLK
+        if (((rcc()->CFGR >> 2U) & 0x3U) == 0x2U) {
+            rcc()->CFGR = (rcc()->CFGR & ~0x3U) | 0x1U;  // SW = HSE (8 MHz)
+            (void)wait_reg_bits(rcc()->CFGR, (0x3U << 2U), (0x1U << 2U), 500000U);
+        }
+        rcc()->CR &= ~(1U << 24U);  // PLLOFF before changing PLLMUL/PLLSRC
+        (void)wait_reg_bits(rcc()->CR, (1U << 25U), 0U, 500000U);
+
+        // 2 Flash wait states + prefetch, PPRE1 = /2 (36 MHz), ADCPRE = /6 (12 MHz),
         // PLL = HSE x 9 = 72 MHz, MCO = HSE (8 MHz)
         flash()->ACR = 0x12U;
         rcc()->CFGR =
-            (0x6U << 24U) | (0x7U << 18U) | (1U << 16U) | (0x2U << 14U) | (0x4U << 8U);
+            (0x6U << 24U) | (0x7U << 18U) | (1U << 16U) | (0x2U << 14U) | (0x4U << 8U) | 0x1U;
         rcc()->CR |= (1U << 24U);  // PLLON
-        while ((rcc()->CR & (1U << 25U)) == 0U) {
-        }
-        rcc()->CFGR = (rcc()->CFGR & ~0x3U) | 0x2U;  // SW = PLL
-        while (((rcc()->CFGR >> 2U) & 0x3U) != 0x2U) {
+        if (wait_reg_bits(rcc()->CR, (1U << 25U), (1U << 25U), 500000U)) {
+            rcc()->CFGR = (rcc()->CFGR & ~0x3U) | 0x2U;  // SW = PLL
+            (void)wait_reg_bits(rcc()->CFGR, (0x3U << 2U), (0x2U << 2U), 500000U);
         }
         sysclk_hz_ = 72000000U;
         pclk1_hz_ = 36000000U;
         pclk2_hz_ = 72000000U;
     } else {
-        // Optimized 8 MHz HSE direct SYSCLK, MCO = HSE (8 MHz), 0 Flash wait states
-        flash()->ACR = 0x00U;
+        // Switch SYSCLK to HSE 8 MHz FIRST, then disable PLL, THEN reduce Flash ACR to 0 WS (CRITICAL-03)
         rcc()->CFGR = (0x6U << 24U) | 0x1U;  // MCO = HSE, SW = HSE
-        while (((rcc()->CFGR >> 2U) & 0x3U) != 0x1U) {
-        }
+        (void)wait_reg_bits(rcc()->CFGR, (0x3U << 2U), (0x1U << 2U), 500000U);
         rcc()->CR &= ~(1U << 24U);  // PLLOFF
+        (void)wait_reg_bits(rcc()->CR, (1U << 25U), 0U, 500000U);
+        flash()->ACR = 0x10U;  // 0 Flash wait states + prefetch enabled (safe at 8 MHz)
         sysclk_hz_ = 8000000U;
         pclk1_hz_ = 8000000U;
         pclk2_hz_ = 8000000U;
@@ -199,6 +220,12 @@ void Stm32F103PlatformHw::enter_stop_mode_wfi() noexcept {
     rcc()->APB1ENR |= (1U << 28U) | (1U << 27U);
     pwr()->CR = (pwr()->CR & ~(1U << 1U)) | (1U << 0U) | (1U << 8U);
     rcc()->BDCR |= (1U << 0U);  // LSEON
+    if (wait_reg_bits(rcc()->BDCR, (1U << 1U), (1U << 1U), 500000U)) {
+        if ((rcc()->BDCR & (0x3U << 8U)) == 0U) {
+            rcc()->BDCR |= (0x1U << 8U);  // RTCSEL = LSE
+        }
+        rcc()->BDCR |= (1U << 15U);  // RTCEN
+    }
 
     // Disable SysTick TICKINT so SysTick cannot wake WFI; clear pending EXTI12 before sleep.
     const uint32_t prev_systick_ctrl = systick()->CTRL;
@@ -348,10 +375,12 @@ void Stm32F103PlatformHw::sd_cs_low() noexcept { gpioa()->BRR = (1U << 4U); }
 void Stm32F103PlatformHw::sd_cs_high() noexcept { gpioa()->BSRR = (1U << 4U); }
 
 uint8_t Stm32F103PlatformHw::spi1_xfer(uint8_t tx) noexcept {
-    while ((spi1()->SR & (1U << 1U)) == 0U) {  // TXE
+    if (!wait_reg_bits(spi1()->SR, (1U << 1U), (1U << 1U), 100000U)) {  // TXE
+        return 0xFFU;
     }
     spi1()->DR = tx;
-    while ((spi1()->SR & (1U << 0U)) == 0U) {  // RXNE
+    if (!wait_reg_bits(spi1()->SR, (1U << 0U), (1U << 0U), 100000U)) {  // RXNE
+        return 0xFFU;
     }
     return static_cast<uint8_t>(spi1()->DR & 0xFFU);
 }
@@ -517,12 +546,12 @@ void Stm32F103PlatformHw::uart1_send(ConstByteView frame) noexcept {
         return;
     }
     for (std::size_t i = 0U; i < frame.length; ++i) {
-        while ((usart1()->SR & (1U << 7U)) == 0U) {  // TXE
+        if (!wait_reg_bits(usart1()->SR, (1U << 7U), (1U << 7U), 200000U)) {  // TXE
+            return;
         }
         usart1()->DR = frame.data[i];
     }
-    while ((usart1()->SR & (1U << 6U)) == 0U) {  // TC
-    }
+    (void)wait_reg_bits(usart1()->SR, (1U << 6U), (1U << 6U), 200000U);  // TC
 }
 
 }  // namespace p05::stm32

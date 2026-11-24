@@ -138,6 +138,7 @@ private:
     bool user_stop_requested_ = false;
     bool ina219_pd_fault_ = false;
     bool pending_overflow_gap_flag_ = false;
+    uint8_t consecutive_lost_sd_blocks_ = 0U;
 
     uint32_t wearable_sample_idx_ = 0U;
     uint32_t sd_block_seq_ = 0U;
@@ -152,6 +153,13 @@ private:
 
     std::array<TrustedRPeakRecord, kSdMaxRrRecords> pending_peaks_{};
     uint8_t pending_peak_count_ = 0U;
+
+    // Static Zero-Heap scratch buffers in .bss to keep stack frames well under _Min_Stack_Size
+    std::array<int16_t, PingPongDmaBuffer::kHalfSamples> dma_copy_scratch_{};
+    TrustedWearableBatch batch_scratch_{};
+    DspBatchOutput dsp_scratch_{};
+    SdRrHrvBlockInput rr_input_scratch_{};
+    SdSectorBuffer sd_sector_scratch_{};
 };
 
 }  // namespace p05

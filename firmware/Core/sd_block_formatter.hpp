@@ -16,9 +16,19 @@ inline constexpr uint16_t kSoftFloat = 1U << 2U;
 inline constexpr uint16_t kFs500Hz = 1U << 3U;
 inline constexpr uint16_t kPingPongOverflowGap = 1U << 4U;
 inline constexpr uint16_t kLowBattery = 1U << 5U;
+inline constexpr uint16_t kIna219Fault = 1U << 6U;    // R2: INA219 reading invalid (CommsFault)
+inline constexpr uint16_t kBatSenseFault = 1U << 7U; // R2: BAT_SENSE reading invalid
+inline constexpr uint16_t kValidMask = 0x00FFU;
 }  // namespace sd_flags
 
 using SdSectorBuffer = std::array<uint8_t, kSdBlockBytes>;
+
+// Zero-copy stack-friendly formatter into caller-owned 512-byte buffer.
+FailureStatus format_sd_raw_ecg_block_into(uint32_t block_seq,
+                                           uint32_t timestamp_ms,
+                                           uint16_t flags,
+                                           const TrustedWearableBatch& batch,
+                                           SdSectorBuffer& out) noexcept;
 
 // Encodes a 512-byte RAW_ECG_BLOCK (PROPOSED-SD-01):
 // 16 B Header ("ECG5", v1, type 0x01, flags, seq, ts_ms)
@@ -45,10 +55,14 @@ struct SdRrHrvBlockInput {
         Result<TrustedIna219Reading>::fail(CanonicalState::CommsFault, DetailCode::I2cIna219Fault);
 };
 
+// Zero-copy stack-friendly formatter into caller-owned 512-byte buffer.
+FailureStatus format_sd_rr_hrv_block_into(const SdRrHrvBlockInput& input,
+                                          SdSectorBuffer& out) noexcept;
+
 // Encodes a 512-byte RR_HRV_BLOCK (PROPOSED-SD-02):
 // 16 B Header + 492 B Body (4 + 4 + 16 + 460 + 8 padding) + 4 B Trailer (CRC-16) = 512 B.
 // Note: when hrv_res / battery_res / ina219_res are invalid, wire placeholders are explicitly
-// flagged (hrv_valid = 0; vbat/bus = 0 with sensor fault flag) so R2 is preserved on readout.
+// flagged (hrv_valid = 0; kBatSenseFault / kIna219Fault in FLAGS) so R2 is preserved on readout.
 Result<SdSectorBuffer> format_sd_rr_hrv_block(const SdRrHrvBlockInput& input) noexcept;
 
 }  // namespace p05

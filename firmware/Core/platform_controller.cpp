@@ -47,15 +47,17 @@ void P05AppController::start_wearable_mode() noexcept {
     wearable_sample_idx_ = 0U;
     pending_peak_count_ = 0U;
     pending_overflow_gap_flag_ = false;
+    consecutive_lost_sd_blocks_ = 0U;
 
     // Power on microSD via AO3401 (PB0 = LOW) and initialize SDHC raw block mode
     hw_.set_sd_power_enable(true);
     sd_powered_ = true;
     sd_ready_ = hw_.sd_init_card();
 
-    // Enable AD8232 AFE (PA3 = HIGH) and start Timer-triggered ADC1 + Circular Ping-Pong DMA
+    // Enable AD8232 AFE (PA3 = HIGH), seed LOD debounce state, and start Timer-triggered ADC1 + DMA
     hw_.set_afe_enable(true);
     afe_enabled_ = true;
+    (void)sensor_mon_.update_leads_off(hw_.read_lod_p_high(), hw_.read_lod_n_high(), hw_.uptime_ms());
     hw_.start_ecg_adc_dma(ping_pong_.dma_dest_ptr(), kDefaultWearableFsHz);
 
     mode_ = AppMode::WearableRun;
@@ -91,6 +93,9 @@ uint16_t P05AppController::build_sd_flags(bool overflow_gap) const noexcept {
 bool P05AppController::write_sd_sector_with_retry(const SdSectorBuffer& sector) noexcept {
     if (!sd_powered_ || !sd_ready_) {
         (void)sensor_mon_.record_sd_write_result(false, 0U);
+        if (consecutive_lost_sd_blocks_ < 255U) {
+            ++consecutive_lost_sd_blocks_;
+        }
         return false;
     }
 
@@ -100,12 +105,16 @@ bool P05AppController::write_sd_sector_with_retry(const SdSectorBuffer& sector) 
         const bool ok = hw_.sd_write_sector(sd_next_lba_, sector.data(), dur_ms);
         if (ok && dur_ms <= kSpiWriteTimeoutMs) {
             (void)sensor_mon_.record_sd_write_result(true, dur_ms);
+            consecutive_lost_sd_blocks_ = 0U;
             ++sd_next_lba_;
             return true;
         }
     }
 
     (void)sensor_mon_.record_sd_write_result(false, kSpiWriteTimeoutMs + 1U);
+    if (consecutive_lost_sd_blocks_ < 255U) {
+        ++consecutive_lost_sd_blocks_;
+    }
     return false;
 }
 
@@ -113,19 +122,21 @@ void P05AppController::flush_rr_hrv_block(uint32_t now_ms) noexcept {
     if (!sd_ready_ || pending_peak_count_ == 0U) {
         return;
     }
-    SdRrHrvBlockInput in{};
-    in.block_seq = sd_block_seq_++;
-    in.timestamp_ms = now_ms;
-    in.flags = build_sd_flags(pending_overflow_gap_flag_);
-    in.valid_rr_count = pending_peak_count_;
-    in.peaks = pending_peaks_;
-    in.hrv_res = hil_.shared_hrv().compute_metrics();
-    in.battery_res = last_bat_res_;
-    in.ina219_res = last_ina_res_;
+    rr_input_scratch_.block_seq = sd_block_seq_++;
+    rr_input_scratch_.timestamp_ms = now_ms;
+    rr_input_scratch_.flags = build_sd_flags(pending_overflow_gap_flag_);
+    rr_input_scratch_.valid_rr_count = pending_peak_count_;
+    rr_input_scratch_.peaks = pending_peaks_;
+    rr_input_scratch_.hrv_res = hil_.shared_hrv().compute_metrics();
+    rr_input_scratch_.battery_res = last_bat_res_;
+    rr_input_scratch_.ina219_res = last_ina_res_;
 
-    const Result<SdSectorBuffer> formatted = format_sd_rr_hrv_block(in);
-    if (formatted.is_ok()) {
-        (void)write_sd_sector_with_retry(formatted.value());
+    const FailureStatus fmt_st =
+        format_sd_rr_hrv_block_into(rr_input_scratch_, sd_sector_scratch_);
+    if (fmt_st.canonical == CanonicalState::Valid) {
+        if (!write_sd_sector_with_retry(sd_sector_scratch_)) {
+            pending_overflow_gap_flag_ = true;
+        }
     }
     pending_peak_count_ = 0U;
 }
@@ -166,13 +177,16 @@ void P05AppController::step() noexcept {
 
     // 1. Keep Leads-Off debounce & 60 s Stop timer updated every loop tick
     (void)sensor_mon_.update_leads_off(hw_.read_lod_p_high(), hw_.read_lod_n_high(), now_ms);
+    if (hil_.lockout_latched()) {
+        (void)try_clear_hil_lockout();
+    }
 
     // 2. Poll battery (every 10 s) and INA219
     poll_battery_and_ina219(now_ms);
 
     // 3. Consume ready Ping-Pong DMA half-buffer (245 samples) if available
-    const PingPongDmaBuffer::ReadyHalf half = ping_pong_.main_poll_ready();
-    if (half.ready) {
+    PingPongDmaBuffer::ReadyHalf half{};
+    if (ping_pong_.main_consume_ready(dma_copy_scratch_, half)) {
         WearableBatchInputs in{};
         in.raw_samples = half.samples;
         in.sample_count = PingPongDmaBuffer::kHalfSamples;
@@ -183,11 +197,15 @@ void P05AppController::step() noexcept {
         in.lod_n_high = hw_.read_lod_n_high();
         in.pingpong_overflow = half.overflowed;
 
-        const Result<TrustedWearableBatch> batch_res = sensor_mon_.validate_wearable_batch(in);
+        const FailureStatus batch_st = sensor_mon_.validate_wearable_batch_into(in, batch_scratch_);
         if (half.overflowed ||
-            (batch_res.is_err() && (batch_res.detail_code() == DetailCode::PingPongOverflow ||
-                                    batch_res.detail_code() == DetailCode::SeqGap))) {
+            batch_st.detail == DetailCode::PingPongOverflow ||
+            batch_st.detail == DetailCode::SeqGap ||
+            batch_st.detail == DetailCode::StaleTimeout) {
             pending_overflow_gap_flag_ = true;
+        }
+        if (half.overflowed && consecutive_lost_sd_blocks_ < 255U) {
+            ++consecutive_lost_sd_blocks_;
         }
 
         if (sensor_mon_.consume_dsp_reset_pending()) {
@@ -197,25 +215,25 @@ void P05AppController::step() noexcept {
                 FailureStatus{CanonicalState::SensorUnavailable, DetailCode::LeadsOff});
         }
 
-        const Result<DspBatchOutput> dsp_res =
-            hil_.shared_dsp().process_wearable_batch(batch_res, wearable_sample_idx_);
+        const FailureStatus dsp_st = hil_.shared_dsp().process_wearable_batch_into(
+            batch_st, batch_scratch_, wearable_sample_idx_, dsp_scratch_);
         wearable_sample_idx_ += static_cast<uint32_t>(PingPongDmaBuffer::kHalfSamples);
 
-        if (batch_res.is_ok()) {
-            // Write 512 B RAW_ECG_BLOCK to microSD via SPI1 in scoped block to reduce peak stack
-            {
-                const Result<SdSectorBuffer> raw_blk = format_sd_raw_ecg_block(
-                    sd_block_seq_++, half.timestamp_ms, build_sd_flags(pending_overflow_gap_flag_),
-                    batch_res.value());
-                if (raw_blk.is_ok()) {
+        if (batch_st.canonical == CanonicalState::Valid) {
+            const FailureStatus raw_st = format_sd_raw_ecg_block_into(
+                sd_block_seq_++, half.timestamp_ms, build_sd_flags(pending_overflow_gap_flag_),
+                batch_scratch_, sd_sector_scratch_);
+            if (raw_st.canonical == CanonicalState::Valid) {
+                if (write_sd_sector_with_retry(sd_sector_scratch_)) {
                     pending_overflow_gap_flag_ = false;
-                    (void)write_sd_sector_with_retry(raw_blk.value());
+                } else {
+                    pending_overflow_gap_flag_ = true;
                 }
             }
 
-            if (dsp_res.is_ok()) {
-                for (uint8_t p = 0U; p < dsp_res.value().r_peak_count; ++p) {
-                    const DetectedRPeak& pk = dsp_res.value().peaks[p];
+            if (dsp_st.canonical == CanonicalState::Valid) {
+                for (uint8_t p = 0U; p < dsp_scratch_.r_peak_count; ++p) {
+                    const DetectedRPeak& pk = dsp_scratch_.peaks[p];
                     (void)hil_.shared_hrv().push_r_peak(pk);
 
                     if (pending_peak_count_ < kSdMaxRrRecords) {
@@ -231,12 +249,14 @@ void P05AppController::step() noexcept {
                 }
             }
         } else {
-            hil_.shared_hrv().on_interruption(batch_res.status());
+            hil_.shared_hrv().on_interruption(batch_st);
         }
     }
 
     // 4. Check all Stop Mode triggers (LOD 60 s, VBAT < 3.40 V, 3x SD/overflow faults, user button)
-    if (sensor_mon_.stop_mode_requested() || user_stop_requested_) {
+    if (sensor_mon_.stop_mode_requested() ||
+        consecutive_lost_sd_blocks_ >= kMaxConsecutiveSdFaults ||
+        user_stop_requested_) {
         enter_stop_mode();
         return;
     }
@@ -249,18 +269,18 @@ void P05AppController::step() noexcept {
 
 void P05AppController::on_uart1_frame(ConstByteView raw_frame) noexcept {
     const uint32_t now_ms = hw_.uptime_ms();
-    // OPEN-2: electrodes detached ONLY when BOTH PA1 and PA2 report HIGH
-    const bool detached = hw_.read_lod_p_high() && hw_.read_lod_n_high();
+    // OPEN-2 / OPEN-6b: electrodes detached ONLY when BOTH PA1 and PA2 are debounced HIGH (>= 50 ms)
+    (void)sensor_mon_.update_leads_off(hw_.read_lod_p_high(), hw_.read_lod_n_high(), now_ms);
+    const bool detached = sensor_mon_.both_leads_off_debounced();
     const HilSafetyInputs safety{protection_known_, detached};
 
     const EncodedHilFrame resp = hil_.handle_frame(raw_frame, now_ms, safety);
     hw_.uart1_send(resp.view());
 
     if (hil_.active() && mode_ != AppMode::HilMode) {
-        // Safely isolate wearable peripherals during HIL session
+        // Isolate ADC/DMA & microSD during HIL session while keeping AD8232 powered (PA3=HIGH)
+        // so PA1/PA2 LOD+/LOD- stay valid for every HIL_SAMPLES_IN check (CRITICAL-01).
         hw_.stop_ecg_adc_dma();
-        hw_.set_afe_enable(false);
-        afe_enabled_ = false;
         hw_.set_spi1_pins_analog();
         hw_.set_sd_power_enable(false);
         sd_powered_ = false;
@@ -277,7 +297,7 @@ bool P05AppController::try_clear_hil_lockout() noexcept {
     const bool lod_p = hw_.read_lod_p_high();
     const bool lod_n = hw_.read_lod_n_high();
     (void)sensor_mon_.update_leads_off(lod_p, lod_n, hw_.uptime_ms());
-    const bool debounced_detached = lod_p && lod_n && sensor_mon_.leads_off_debounced();
+    const bool debounced_detached = sensor_mon_.both_leads_off_debounced();
     const HilSafetyInputs safety{protection_known_, debounced_detached};
     return hil_.try_clear_lockout(safety);
 }

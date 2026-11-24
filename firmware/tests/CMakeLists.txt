@@ -138,3 +138,28 @@ target_compile_options(test_platform_adapter PRIVATE
 )
 
 add_test(NAME platform_adapter_mock_tests COMMAND test_platform_adapter)
+
+# R-PLT-01 / OPEN-22 static HAL/LL include check
+add_test(
+    NAME plt01_hal_include_policy
+    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/check_hal_includes.cmake"
+)
+
+# R-BND-04 static analysis check (cppcheck)
+find_program(CPPCHECK_EXE cppcheck)
+if(CPPCHECK_EXE)
+    add_test(
+        NAME bnd04_cppcheck_static_analysis
+        COMMAND ${CPPCHECK_EXE}
+            --error-exitcode=1
+            --enable=warning,performance,portability
+            --std=c++17
+            --suppress=missingIncludeSystem
+            -I "${CMAKE_CURRENT_SOURCE_DIR}/../Core"
+            -I "${CMAKE_CURRENT_SOURCE_DIR}/../DSP"
+            -I "${CMAKE_CURRENT_SOURCE_DIR}/../HIL"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../Core"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../DSP"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../HIL"
+    )
+endif()

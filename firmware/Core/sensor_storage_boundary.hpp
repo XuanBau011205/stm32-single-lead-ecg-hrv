@@ -40,6 +40,8 @@ public:
     bool update_leads_off(bool lod_p_high, bool lod_n_high, uint32_t uptime_ms) noexcept;
 
     // Validates an incoming wearable ECG ADC half-buffer at the boundary.
+    FailureStatus validate_wearable_batch_into(const WearableBatchInputs& inputs,
+                                             TrustedWearableBatch& out) noexcept;
     Result<TrustedWearableBatch> validate_wearable_batch(
         const WearableBatchInputs& inputs) noexcept;
 
@@ -56,6 +58,7 @@ public:
 
     // Latches low battery or hardware faults independently of comms errors (R-BND-03).
     bool leads_off_debounced() const noexcept { return lod_debounced_; }
+    bool both_leads_off_debounced() const noexcept { return both_lod_debounced_; }
     bool dsp_reset_pending() const noexcept { return dsp_reset_pending_; }
     bool consume_dsp_reset_pending() noexcept;
 
@@ -74,6 +77,10 @@ private:
     bool lod_candidate_ = false;
     bool has_lod_candidate_time_ = false;
     uint32_t lod_candidate_since_ms_ = 0U;
+    bool both_lod_debounced_ = false;
+    bool both_lod_candidate_ = false;
+    bool has_both_lod_candidate_time_ = false;
+    uint32_t both_lod_candidate_since_ms_ = 0U;
     bool has_lod_active_time_ = false;
     uint32_t lod_active_since_ms_ = 0U;
     bool lod_stop_requested_ = false;

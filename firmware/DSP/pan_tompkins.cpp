@@ -568,26 +568,28 @@ Result<DspBatchOutput> EcgDspCore::process_hil_batch(
     return Result<DspBatchOutput>::ok(out);
 }
 
-Result<DspBatchOutput> EcgDspCore::process_wearable_batch(
-    const Result<TrustedWearableBatch>& batch_res, uint32_t first_sample_idx) noexcept {
-    if (batch_res.is_err()) {
-        if (batch_res.detail_code() == DetailCode::SeqGap ||
-            batch_res.detail_code() == DetailCode::PingPongOverflow) {
+FailureStatus EcgDspCore::process_wearable_batch_into(const FailureStatus& batch_status,
+                                                      const TrustedWearableBatch& batch,
+                                                      uint32_t first_sample_idx,
+                                                      DspBatchOutput& out) noexcept {
+    if (batch_status.canonical != CanonicalState::Valid) {
+        if (batch_status.detail == DetailCode::SeqGap ||
+            batch_status.detail == DetailCode::PingPongOverflow ||
+            batch_status.detail == DetailCode::StaleTimeout) {
             reset_with_gap_blanking();
-        } else if (batch_res.canonical_state() == CanonicalState::SensorUnavailable ||
-                   batch_res.canonical_state() == CanonicalState::Stale) {
+        } else if (batch_status.canonical == CanonicalState::SensorUnavailable ||
+                   batch_status.canonical == CanonicalState::Stale) {
             detector_.break_rr_continuity();
         }
-        return Result<DspBatchOutput>::fail(batch_res.status());
+        return batch_status;
     }
 
-    const TrustedWearableBatch& batch = batch_res.value();
     if (batch.fs_hz != filter_.fs_hz()) {
-        return Result<DspBatchOutput>::fail(CanonicalState::Malformed, DetailCode::SemanticRange);
+        return FailureStatus{CanonicalState::Malformed, DetailCode::SemanticRange};
     }
 
-    DspBatchOutput out{};
     out.sample_count = batch.sample_count;
+    out.r_peak_count = 0U;
     for (std::size_t i = 0U; i < static_cast<std::size_t>(batch.sample_count); ++i) {
         const uint32_t idx = first_sample_idx + static_cast<uint32_t>(i);
         const DspSampleOutput s_out = process_trusted_adc_sample(batch.samples[i], idx);
@@ -595,6 +597,24 @@ Result<DspBatchOutput> EcgDspCore::process_wearable_batch(
             out.peaks[out.r_peak_count] = s_out.r_peak;
             ++out.r_peak_count;
         }
+    }
+    return FailureStatus{CanonicalState::Valid, DetailCode::Ok};
+}
+
+Result<DspBatchOutput> EcgDspCore::process_wearable_batch(
+    const Result<TrustedWearableBatch>& batch_res, uint32_t first_sample_idx) noexcept {
+    if (batch_res.is_err()) {
+        TrustedWearableBatch dummy{};
+        DspBatchOutput unused{};
+        return Result<DspBatchOutput>::fail(
+            process_wearable_batch_into(batch_res.status(), dummy, first_sample_idx, unused));
+    }
+
+    DspBatchOutput out{};
+    const FailureStatus st =
+        process_wearable_batch_into(batch_res.status(), batch_res.value(), first_sample_idx, out);
+    if (st.canonical != CanonicalState::Valid) {
+        return Result<DspBatchOutput>::fail(st);
     }
     return Result<DspBatchOutput>::ok(out);
 }

@@ -33,6 +33,8 @@ public:
         last_half_ready_.store(0U, std::memory_order_relaxed);
         ts_ms_[0].store(0U, std::memory_order_relaxed);
         ts_ms_[1].store(0U, std::memory_order_relaxed);
+        half_gen_[0].store(0U, std::memory_order_relaxed);
+        half_gen_[1].store(0U, std::memory_order_relaxed);
     }
 
     // Raw destination pointer for DMA1_Channel1->CMAR (490 x int16_t circular buffer).
@@ -41,14 +43,56 @@ public:
     // Called from DMA1_Channel1_IRQHandler on Half-Transfer (HTIF, half_index = 0)
     // or Transfer-Complete (TCIF, half_index = 1). Strictly O(1), non-blocking!
     void isr_notify_half_complete(uint8_t half_index, uint32_t uptime_ms) noexcept {
-        const uint8_t bit = static_cast<uint8_t>(1U << (half_index & 1U));
+        const uint8_t idx = static_cast<uint8_t>(half_index & 1U);
+        const uint8_t bit = static_cast<uint8_t>(1U << idx);
+        ts_ms_[idx].store(uptime_ms, std::memory_order_release);
+        half_gen_[idx].fetch_add(1U, std::memory_order_release);
+        last_half_ready_.store(idx, std::memory_order_release);
         const uint8_t prev = ready_mask_.fetch_or(bit, std::memory_order_release);
         if ((prev & bit) != 0U) {
             // Main loop did not finish consuming this half before DMA wrapped around!
             overflow_flag_.store(1U, std::memory_order_release);
         }
-        ts_ms_[half_index & 1U].store(uptime_ms, std::memory_order_release);
-        last_half_ready_.store(static_cast<uint8_t>(half_index & 1U), std::memory_order_release);
+    }
+
+    // Race-safe main-loop consumer: copies 245 samples into caller-owned dst_out and detects
+    // any mid-copy DMA overwrite via generation counter (MEDIUM-04).
+    bool main_consume_ready(std::array<int16_t, kHalfSamples>& dst_out,
+                            ReadyHalf& meta_out) noexcept {
+        meta_out = ReadyHalf{};
+        const uint8_t mask = ready_mask_.load(std::memory_order_acquire);
+        if (mask == 0U) {
+            return false;
+        }
+
+        uint8_t pick = 0U;
+        if (mask == 0x03U) {
+            const uint8_t newest = last_half_ready_.load(std::memory_order_acquire);
+            pick = static_cast<uint8_t>(newest ^ 1U);
+        } else {
+            pick = (mask == 0x01U) ? 0U : 1U;
+        }
+
+        const uint32_t gen_before = half_gen_[pick].load(std::memory_order_acquire);
+        meta_out.timestamp_ms = ts_ms_[pick].load(std::memory_order_acquire);
+        const uint8_t clear_mask = static_cast<uint8_t>(~(1U << pick));
+        ready_mask_.fetch_and(clear_mask, std::memory_order_acq_rel);
+
+        const std::size_t base = static_cast<std::size_t>(pick) * kHalfSamples;
+        for (std::size_t i = 0U; i < kHalfSamples; ++i) {
+            dst_out[i] = dma_buffer_[base + i];
+        }
+        std::atomic_thread_fence(std::memory_order_acquire);
+
+        const uint32_t gen_after = half_gen_[pick].load(std::memory_order_acquire);
+        const bool ovf = (overflow_flag_.exchange(0U, std::memory_order_acq_rel) != 0U) ||
+                         (gen_after != gen_before);
+
+        meta_out.ready = true;
+        meta_out.half_index = pick;
+        meta_out.overflowed = ovf;
+        meta_out.samples = dst_out.data();
+        return true;
     }
 
     // Called from main loop outside ISR to claim the oldest ready half-buffer.
@@ -86,6 +130,7 @@ private:
     std::atomic<uint8_t> overflow_flag_{0U};
     std::atomic<uint8_t> last_half_ready_{0U};
     std::array<std::atomic<uint32_t>, 2U> ts_ms_{};
+    std::array<std::atomic<uint32_t>, 2U> half_gen_{};
 };
 
 }  // namespace p05

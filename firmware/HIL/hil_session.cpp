@@ -138,6 +138,7 @@ EncodedHilFrame HilSession::encode_result_ack(
 EncodedHilFrame HilSession::handle_frame(ConstByteView raw_frame,
                                          uint32_t uptime_ms,
                                          const HilSafetyInputs& safety) noexcept {
+    const bool was_active = validator_.hil_session_active();
     const Result<TrustedHilCommand> parsed =
         validator_.validate_incoming_frame(raw_frame, uptime_ms, safety);
 
@@ -147,8 +148,9 @@ EncodedHilFrame HilSession::handle_frame(ConstByteView raw_frame,
             // OPEN-15: gap resets IIR & Pan-Tompkins with 2 s blanking and breaks HRV continuity
             dsp_.reset_with_gap_blanking();
             hrv_.on_interruption(parsed.status());
-        } else if (!validator_.hil_session_active()) {
-            // Session aborted (3 consecutive malformed frames, timeout, or protection lockout)
+        } else if (was_active && !validator_.hil_session_active()) {
+            // Active HIL session aborted (3 consecutive malformed frames, timeout, or lockout).
+            // Never wipe shared Wearable DSP/HRV state if HIL was not active (OPEN-2 / R-BND-03).
             reset_processing_state();
         }
         return encode_error_nack(rej_seq, parsed.status());
@@ -245,9 +247,12 @@ FailureStatus HilSession::poll_timeout(uint32_t uptime_ms) noexcept {
 }
 
 FailureStatus HilSession::on_uart_fault() noexcept {
-    // OPEN-3 & R-BND-03: close session & reset DSP, NEVER clear latched safety lockout
+    // OPEN-3 & R-BND-03: close session & reset DSP only if HIL was active; NEVER clear lockout
+    const bool was_active = validator_.hil_session_active();
     const FailureStatus st = validator_.on_comms_fault();
-    reset_processing_state();
+    if (was_active) {
+        reset_processing_state();
+    }
     return st;
 }
 

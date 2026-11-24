@@ -172,6 +172,10 @@ public:
     Result<DspBatchOutput> process_hil_batch(const Result<TrustedSampleBatch>& batch_res) noexcept;
 
     // Processes a Wearable TrustedWearableBatch Result; propagates errors without fake zeros.
+    FailureStatus process_wearable_batch_into(const FailureStatus& batch_status,
+                                            const TrustedWearableBatch& batch,
+                                            uint32_t first_sample_idx,
+                                            DspBatchOutput& out) noexcept;
     Result<DspBatchOutput> process_wearable_batch(
         const Result<TrustedWearableBatch>& batch_res, uint32_t first_sample_idx) noexcept;
 

@@ -105,10 +105,10 @@ struct FailureStatus {
 template <typename T>
 class Result {
 public:
-    static constexpr Result ok(T value, DetailCode detail = DetailCode::Ok) noexcept {
+    static constexpr Result ok(const T& value, DetailCode detail = DetailCode::Ok) noexcept {
         const DetailCode safe_detail =
             (detail == DetailCode::DuplicateIgnored) ? DetailCode::DuplicateIgnored : DetailCode::Ok;
-        return Result(std::move(value), FailureStatus{CanonicalState::Valid, safe_detail});
+        return Result(std::in_place, value, FailureStatus{CanonicalState::Valid, safe_detail});
     }
 
     static constexpr Result fail(CanonicalState state, DetailCode detail) noexcept {
@@ -140,8 +140,11 @@ public:
     constexpr const T& value() const noexcept { return *value_; }
 
 private:
-    constexpr Result(std::optional<T> val, FailureStatus st) noexcept
-        : value_(std::move(val)), status_(st) {}
+    constexpr Result(std::in_place_t, const T& val, FailureStatus st) noexcept
+        : value_(std::in_place, val), status_(st) {}
+
+    constexpr Result(std::nullopt_t, FailureStatus st) noexcept
+        : value_(std::nullopt), status_(st) {}
 
     std::optional<T> value_;
     FailureStatus status_;
@@ -246,6 +249,8 @@ struct TrustedSdRrHrvBlock {
     TrustedSdHeader header{};
     uint8_t valid_rr_count = 0U;
     bool hrv_valid = false;
+    bool battery_valid = true;
+    bool ina219_valid = true;
     uint16_t vbat_mv = 0U;
     int16_t ina219_current_ua_div10 = 0;
     uint16_t ina219_bus_mv = 0U;

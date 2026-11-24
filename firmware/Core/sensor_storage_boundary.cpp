@@ -44,16 +44,25 @@ Result<TrustedSdHeader> parse_and_validate_sd_envelope(ConstByteView raw_block,
         return Result<TrustedSdHeader>::fail(CanonicalState::Malformed, DetailCode::BadCrc);
     }
 
-    // 5. Block type & header field-by-field Little-Endian decode
+    // 5. Block type, reserved trailer, flag mask & header field-by-field Little-Endian decode
     const uint8_t raw_type = buf[5];
     if (raw_type != static_cast<uint8_t>(expected_type)) {
+        return Result<TrustedSdHeader>::fail(CanonicalState::Malformed, DetailCode::SemanticRange);
+    }
+
+    if (read_u16_le(&buf[508]) != 0U) {
+        return Result<TrustedSdHeader>::fail(CanonicalState::Malformed, DetailCode::SemanticRange);
+    }
+
+    const uint16_t raw_flags = read_u16_le(&buf[6]);
+    if ((raw_flags & ~0x00FFU) != 0U) {
         return Result<TrustedSdHeader>::fail(CanonicalState::Malformed, DetailCode::SemanticRange);
     }
 
     TrustedSdHeader hdr{};
     hdr.version = buf[4];
     hdr.block_type = expected_type;
-    hdr.flags = read_u16_le(&buf[6]);
+    hdr.flags = raw_flags;
     hdr.block_seq = read_u32_le(&buf[8]);
     hdr.timestamp_ms = read_u32_le(&buf[12]);
     return Result<TrustedSdHeader>::ok(hdr);
@@ -89,6 +98,24 @@ bool SensorBoundaryMonitor::update_leads_off(bool lod_p_high,
         }
     }
 
+    const bool raw_both_lod = lod_p_high && lod_n_high;
+    if (!raw_both_lod) {
+        // Fail-safe: any electrode attachment drops HIL-safe flag immediately (0 ms delay)
+        both_lod_candidate_ = false;
+        both_lod_candidate_since_ms_ = uptime_ms;
+        has_both_lod_candidate_time_ = true;
+        both_lod_debounced_ = false;
+    } else {
+        if (!both_lod_candidate_ || !has_both_lod_candidate_time_) {
+            both_lod_candidate_ = true;
+            both_lod_candidate_since_ms_ = uptime_ms;
+            has_both_lod_candidate_time_ = true;
+        }
+        if ((uptime_ms - both_lod_candidate_since_ms_) >= kLodDebounceMs) {
+            both_lod_debounced_ = true;
+        }
+    }
+
     if (lod_debounced_ && has_lod_active_time_) {
         if ((uptime_ms - lod_active_since_ms_) >= kLodStopTimeoutMs) {
             lod_stop_requested_ = true;
@@ -98,31 +125,27 @@ bool SensorBoundaryMonitor::update_leads_off(bool lod_p_high,
     return lod_debounced_;
 }
 
-Result<TrustedWearableBatch> SensorBoundaryMonitor::validate_wearable_batch(
-    const WearableBatchInputs& inputs) noexcept {
+FailureStatus SensorBoundaryMonitor::validate_wearable_batch_into(
+    const WearableBatchInputs& inputs, TrustedWearableBatch& out) noexcept {
     // Update debounced Leads-Off tracker first so 50 ms debounce and 60 s Stop timer stay current.
     const bool lod_now = update_leads_off(inputs.lod_p_high, inputs.lod_n_high, inputs.uptime_ms);
 
     if (low_battery_latched_) {
-        return Result<TrustedWearableBatch>::fail(CanonicalState::SensorUnavailable,
-                                                  DetailCode::LowBattery);
+        return FailureStatus{CanonicalState::SensorUnavailable, DetailCode::LowBattery};
     }
 
     if (!inputs.afe_enabled) {
         has_last_adc_ms_ = false;
-        return Result<TrustedWearableBatch>::fail(CanonicalState::SensorUnavailable,
-                                                  DetailCode::AfeShutdown);
+        return FailureStatus{CanonicalState::SensorUnavailable, DetailCode::AfeShutdown};
     }
 
     if (lod_now) {
         has_last_adc_ms_ = false;
-        return Result<TrustedWearableBatch>::fail(CanonicalState::SensorUnavailable,
-                                                  DetailCode::LeadsOff);
+        return FailureStatus{CanonicalState::SensorUnavailable, DetailCode::LeadsOff};
     }
 
     if (inputs.fs_hz != kFs250Hz && inputs.fs_hz != kFs500Hz) {
-        return Result<TrustedWearableBatch>::fail(CanonicalState::Malformed,
-                                                  DetailCode::SemanticRange);
+        return FailureStatus{CanonicalState::Malformed, DetailCode::SemanticRange};
     }
 
     // Ping-Pong DMA overflow check (OPEN-7b: 3 consecutive overflow blocks -> Stop Mode)
@@ -132,11 +155,9 @@ Result<TrustedWearableBatch> SensorBoundaryMonitor::validate_wearable_batch(
         }
         if (consecutive_overflow_faults_ >= kMaxConsecutiveSdFaults) {
             sd_stop_requested_ = true;
-            return Result<TrustedWearableBatch>::fail(CanonicalState::CommsFault,
-                                                      DetailCode::SpiSdFault);
+            return FailureStatus{CanonicalState::CommsFault, DetailCode::SpiSdFault};
         }
-        return Result<TrustedWearableBatch>::fail(CanonicalState::CommsFault,
-                                                  DetailCode::PingPongOverflow);
+        return FailureStatus{CanonicalState::CommsFault, DetailCode::PingPongOverflow};
     }
 
     // Explicit uptime-based staleness check (OPEN-5)
@@ -144,18 +165,16 @@ Result<TrustedWearableBatch> SensorBoundaryMonitor::validate_wearable_batch(
         const uint32_t elapsed_ms = inputs.uptime_ms - last_adc_ms_;
         if (elapsed_ms > adc_stale_threshold_ms(inputs.fs_hz)) {
             last_adc_ms_ = inputs.uptime_ms;
-            return Result<TrustedWearableBatch>::fail(CanonicalState::Stale,
-                                                      DetailCode::StaleTimeout);
+            return FailureStatus{CanonicalState::Stale, DetailCode::StaleTimeout};
         }
     }
 
     // Buffer pointer & length checks
     if (inputs.raw_samples == nullptr || inputs.sample_count == 0U ||
         inputs.sample_count > kSdMaxRawSamples) {
-        return Result<TrustedWearableBatch>::fail(CanonicalState::Malformed, DetailCode::BadLength);
+        return FailureStatus{CanonicalState::Malformed, DetailCode::BadLength};
     }
 
-    TrustedWearableBatch out{};
     out.timestamp_ms = inputs.uptime_ms;
     out.fs_hz = inputs.fs_hz;
     out.sample_count = static_cast<uint16_t>(inputs.sample_count);
@@ -164,8 +183,7 @@ Result<TrustedWearableBatch> SensorBoundaryMonitor::validate_wearable_batch(
         const int16_t sample = inputs.raw_samples[i];
         if (sample < static_cast<int16_t>(kAdcRawMin) ||
             sample > static_cast<int16_t>(kAdcRawMax)) {
-            return Result<TrustedWearableBatch>::fail(CanonicalState::Malformed,
-                                                      DetailCode::SemanticRange);
+            return FailureStatus{CanonicalState::Malformed, DetailCode::SemanticRange};
         }
         out.samples[i] = sample;
     }
@@ -173,6 +191,16 @@ Result<TrustedWearableBatch> SensorBoundaryMonitor::validate_wearable_batch(
     consecutive_overflow_faults_ = 0U;
     last_adc_ms_ = inputs.uptime_ms;
     has_last_adc_ms_ = true;
+    return FailureStatus{CanonicalState::Valid, DetailCode::Ok};
+}
+
+Result<TrustedWearableBatch> SensorBoundaryMonitor::validate_wearable_batch(
+    const WearableBatchInputs& inputs) noexcept {
+    TrustedWearableBatch out{};
+    const FailureStatus st = validate_wearable_batch_into(inputs, out);
+    if (st.canonical != CanonicalState::Valid) {
+        return Result<TrustedWearableBatch>::fail(st);
+    }
     return Result<TrustedWearableBatch>::ok(out);
 }
 
@@ -262,6 +290,7 @@ void SensorBoundaryMonitor::reset_after_wake() noexcept {
     consecutive_spi_faults_ = 0U;
     has_last_adc_ms_ = false;
     has_lod_candidate_time_ = false;
+    has_both_lod_candidate_time_ = false;
     has_lod_active_time_ = false;
 }
 
@@ -321,6 +350,8 @@ Result<TrustedSdRrHrvBlock> parse_sd_rr_hrv_block(ConstByteView raw_block) noexc
     block.header = hdr.value();
     block.valid_rr_count = valid_rr_count;
     block.hrv_valid = (hrv_valid_raw == 1U);
+    block.ina219_valid = (block.header.flags & (1U << 6U)) == 0U;
+    block.battery_valid = (block.header.flags & (1U << 7U)) == 0U;
     block.vbat_mv = vbat_mv;
     block.ina219_current_ua_div10 = ina219_cur;
     block.ina219_bus_mv = ina219_bus;

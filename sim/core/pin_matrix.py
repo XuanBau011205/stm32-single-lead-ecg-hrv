@@ -111,6 +111,7 @@ class VirtualPinMatrix:
     _i2c1_write: Optional[Callable[[int, bytes], bool]] = field(default=None, repr=False)
     _i2c1_read: Optional[Callable[[int, int], Tuple[bool, bytes]]] = field(default=None, repr=False)
     _exti12_callbacks: list = field(default_factory=list, repr=False)
+    _gpio_out_callbacks: list = field(default_factory=list, repr=False)
 
     def register_spi1_slave(self, xfer_fn: Callable[[int], int]) -> None:
         self._spi1_xfer = xfer_fn
@@ -125,6 +126,13 @@ class VirtualPinMatrix:
 
     def register_exti12_callback(self, cb: Callable[[bool], None]) -> None:
         self._exti12_callbacks.append(cb)
+
+    def register_gpio_out_callback(self, cb: Callable[[], None]) -> None:
+        self._gpio_out_callbacks.append(cb)
+
+    def notify_gpio_outputs_changed(self) -> None:
+        for cb in self._gpio_out_callbacks:
+            cb()
 
     def set_wake_button(self, pressed: bool) -> None:
         prev = self.sw_wake_pressed

@@ -296,11 +296,19 @@ class STM32F103MMIO:
     def _sync_gpio_to_matrix(self) -> None:
         if self.matrix is None:
             return
+        prev_sd_pwr = self.matrix.digital["SD_PWR_EN"]
+        prev_bat_en = self.matrix.digital["BAT_SENSE_EN"]
+
         # Sync MCU digital outputs -> VirtualPinMatrix
         self.matrix.digital["ECG_SDN"] = bool(self.gpioa_odr & (1 << 3))
         self.matrix.digital["SD_CS"] = bool(self.gpioa_odr & (1 << 4))
         self.matrix.digital["SD_PWR_EN"] = bool(self.gpiob_odr & (1 << 0))
         self.matrix.digital["BAT_SENSE_EN"] = bool(self.gpiob_odr & (1 << 5))
+
+        if (self.matrix.digital["SD_PWR_EN"] != prev_sd_pwr) or (
+            self.matrix.digital["BAT_SENSE_EN"] != prev_bat_en
+        ):
+            self.matrix.notify_gpio_outputs_changed()
 
         # Sync electrical pin modes (CRL/CRH) -> VirtualPinMatrix (enables realistic Stop Mode leakage check!)
         for pin in range(11):
@@ -490,6 +498,8 @@ class STM32F103MMIO:
                     b = self.matrix.uart1_rx_fifo.popleft()
                     if not self.matrix.uart1_rx_fifo:
                         self.usart1_sr &= ~0x0020
+                    elif self.usart1_cr1 & 0x0020:  # RXNEIE: more bytes waiting
+                        self.nvic.set_irq_pending(IRQ_USART1)
                     return b
                 return 0
             if reg == 0x08:
@@ -781,7 +791,10 @@ class STM32F103MMIO:
             if self._i2c_state == "ADDR_RX" and self._i2c_rx_idx < len(self._i2c_rx_buf):
                 b = self._i2c_rx_buf[self._i2c_rx_idx]
                 self._i2c_rx_idx += 1
-                if self._i2c_rx_idx >= len(self._i2c_rx_buf):
+                rem = len(self._i2c_rx_buf) - self._i2c_rx_idx
+                if rem < 2:
+                    self.i2c1_sr1 &= ~0x0004  # Clear BTF when < 2 bytes remain
+                if rem <= 0:
                     self.i2c1_sr1 &= ~0x0040  # Clear RXNE
                 return b
             return 0
@@ -790,6 +803,8 @@ class STM32F103MMIO:
         if reg == 0x18:  # SR2 (reading SR2 after SR1 clears ADDR!)
             if self.i2c1_sr1 & 0x0002:
                 self.i2c1_sr1 &= ~0x0002
+                if self._i2c_state == "ADDR_RX" and (len(self._i2c_rx_buf) - self._i2c_rx_idx) >= 2:
+                    self.i2c1_sr1 |= 0x0004  # BTF = 1 for 2-byte POS=1 read
             return self.i2c1_sr2
         if reg == 0x1C:
             return self.i2c1_ccr

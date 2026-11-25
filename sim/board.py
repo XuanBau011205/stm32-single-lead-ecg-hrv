@@ -63,6 +63,7 @@ class P05VirtualBoard:
         # Wire physical bus slaves onto the board's VirtualPinMatrix
         self.matrix.register_spi1_slave(self.sdcard.spi_transfer_byte)
         self.matrix.register_i2c1_bus(self._i2c1_write_dispatch, self._i2c1_read_dispatch)
+        self.matrix.register_gpio_out_callback(self._on_mcu_gpio_changed)
 
         # Firmware execution socket (default = HardwareOnlyBackend until .elf/.dll is attached)
         self.backend: IFirmwareBackend = HardwareOnlyBackend()
@@ -99,6 +100,19 @@ class P05VirtualBoard:
         if addr_7bit == self.ina219.i2c_addr:
             return self.ina219.i2c_read(addr_7bit, length)
         return False, b""
+
+    def _on_mcu_gpio_changed(self) -> None:
+        """Immediate electrical propagation when MCU toggles BAT_SENSE_EN or SD_PWR_EN mid-step."""
+        if self.matrix.digital["BAT_SENSE_EN"] and self.matrix.j_imeas_closed:
+            self.matrix.analog["BAT_SENSE"] = self.matrix.rails["VBAT"] * self.power.bat_div_ratio
+        else:
+            self.matrix.analog["BAT_SENSE"] = 0.0
+
+        if (not self.matrix.digital["SD_PWR_EN"]) and self.matrix.j_imeas_closed:
+            self.matrix.rails["3V3_SD"] = self.matrix.rails["3V3_MAIN"]
+        else:
+            self.matrix.rails["3V3_SD"] = 0.0
+        self.sdcard.update(self.matrix, 0.0)
 
     # --- Firmware Socket API ---
     def attach_firmware(self, backend: IFirmwareBackend, firmware_path: Optional[Path] = None) -> Optional[FirmwareInfo]:

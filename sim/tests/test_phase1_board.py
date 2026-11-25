@@ -112,6 +112,7 @@ class TestP05Phase1VirtualBoard(unittest.TestCase):
         for bv in block:
             self.board.matrix.spi1_transfer_byte(bv)
         self.board.matrix.spi1_transfer_byte(0xFF)
+        self.board.matrix.spi1_transfer_byte(0xFF)
         self.assertEqual(self.board.matrix.spi1_transfer_byte(0xFF), 0x05)
 
         # Verify flash busy current spike (30 mA) and MISO=0x00 while busy

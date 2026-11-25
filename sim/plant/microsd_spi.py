@@ -134,7 +134,7 @@ class VirtualMicroSD:
                 self._commit_sector(self._write_sector, bytes(self._write_buf))
                 self._write_mode = "IDLE"
                 self._busy_remaining_us = self.write_latency_us
-                return 0x05  # Data Accepted token!
+                self._tx_queue.append(0x05)  # Data Accepted token on the NEXT byte!
             return 0xFF
 
         # 4. Command packet assembly (6 bytes starting with 0b01xxxxxx)

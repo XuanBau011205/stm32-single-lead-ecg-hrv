@@ -52,7 +52,7 @@ SRAM_STACK_WARN_LIMIT = SRAM_BASE + SRAM_SIZE - 0x800  # 2 KB _Min_Stack_Size wa
 class UnicornBackend(IFirmwareBackend):
     """Real ARM Cortex-M3 emulator backend powered by Unicorn Engine 2."""
 
-    def __init__(self, max_insns_per_step: int = 20000) -> None:
+    def __init__(self, max_insns_per_step: int = 40000) -> None:
         self.max_insns_per_step = int(max_insns_per_step)
         self.uc = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
         try:
@@ -148,6 +148,8 @@ class UnicornBackend(IFirmwareBackend):
         cyc = 1 if size == 2 else 2
         self._step_cycles += cyc
         self.nvic.add_cycles(cyc)
+        if self.nvic.systick_pending and not self.nvic.active_exceptions:
+            uc.emu_stop()
 
     def _write_sram_bytes(self, addr: int, data: bytes) -> None:
         if SRAM_BASE <= addr and addr + len(data) <= SRAM_BASE + SRAM_SIZE:
@@ -245,6 +247,9 @@ class UnicornBackend(IFirmwareBackend):
         self.mmio.tick(dt_us, cpu_awake=cpu_awake)
 
         # 2. Check wakeup from STOP or SLEEP on any enabled pending NVIC exception!
+        if self.power_mode == McuPowerMode.SLEEP_8MHZ:
+            # In Sleep Mode, HCLK/SysTick keeps running and wakes CPU on SysTick IRQ.
+            self.nvic.add_cycles(max(1, int(self.mmio.sysclk_hz * dt_us * 1e-6)))
         if self.power_mode in (McuPowerMode.STOP, McuPowerMode.SLEEP_8MHZ):
             if self.nvic.has_enabled_pending_exception():
                 self.power_mode = self._active_run_mode()
